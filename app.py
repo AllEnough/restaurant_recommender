@@ -5,7 +5,7 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 from recommender import get_mood_strategy, load_data, recommend_restaurants
-from recipe_recommender import load_recipes, recommend_recipes
+from recipe_recommender import collect_ingredient_options, load_recipes, recommend_recipes
 
 st.set_page_config(page_title="今天吃什麼", layout="wide")
 
@@ -29,6 +29,8 @@ if mode == "外食推薦":
     need_takeout = st.sidebar.selectbox("是否需要外帶", ["不限", "yes", "no"])
     max_spicy_level = st.sidebar.slider("可接受辣度", 0, 5, 2)
     prefer_fast = st.sidebar.checkbox("希望快速出餐")
+    sort_by = st.sidebar.selectbox("排序方式", ["綜合推薦", "CP值優先", "距離最近", "評分最高"])
+    min_rating = st.sidebar.slider("最低評分", 0.0, 5.0, 0.0, step=0.1)
     top_n = st.sidebar.slider("顯示推薦筆數", 3, 10, 5)
 
     result = recommend_restaurants(
@@ -42,9 +44,12 @@ if mode == "外食推薦":
         max_spicy_level,
         prefer_fast,
         top_n,
+        sort_by,
+        min_rating,
     )
 
     st.info(f"目前情緒策略：{get_mood_strategy(mood)}")
+    st.caption(f"目前排序方式：{sort_by}｜最低評分：{min_rating:.1f}")
 
     if mood == "選擇困難" and not result.empty:
         surprise = result.sample(1, random_state=int(result["score"].sum() * 10)).iloc[0]
@@ -70,6 +75,7 @@ if mode == "外食推薦":
             col3.write(f"出餐速度：{row['serve_speed']}")
             col3.write(f"辣度：{row['spicy_level']} / 5")
             col4.metric("推薦分數", f"{row['score']}")
+            col4.write(f"CP 值：{row['cp_score']}")
             st.write(f"推薦理由：{row['reason']}")
 
 
@@ -125,16 +131,35 @@ else:
     recipes = load_recipes("recipes.csv")
 
     st.sidebar.header("內食需求")
-    ingredient_text = st.sidebar.text_area(
-        "冰箱現有食材",
-        value="雞蛋, 白飯, 蔥",
-        help="可用逗號、頓號或空白分隔，例如：雞蛋, 白飯, 蔥",
+    ingredient_options = collect_ingredient_options(recipes)
+    selected_ingredients = st.sidebar.multiselect(
+        "常見食材快速選擇",
+        ingredient_options,
+        default=[item for item in ["雞蛋", "白飯", "蔥"] if item in ingredient_options],
     )
+    custom_ingredients = st.sidebar.text_area(
+        "其他冰箱食材",
+        value="",
+        help="可用逗號、頓號或空白分隔，例如：豆腐, 番茄",
+    )
+    ingredient_text = ",".join(selected_ingredients + [custom_ingredients])
     max_time = st.sidebar.slider("可接受烹飪時間（分鐘）", 5, 60, 20, step=5)
     difficulty_preference = st.sidebar.selectbox("料理難度", ["不限", "簡單", "中等", "困難"])
+    max_calories = st.sidebar.slider("熱量上限（kcal）", 150, 900, 650, step=50)
+    max_missing = st.sidebar.slider("最多可缺少食材數", 0, 5, 2)
+    only_cookable = st.sidebar.checkbox("只顯示現有食材足夠的食譜")
     top_n = st.sidebar.slider("顯示推薦筆數", 3, 10, 5)
 
-    result = recommend_recipes(recipes, ingredient_text, max_time, difficulty_preference, top_n)
+    result = recommend_recipes(
+        recipes,
+        ingredient_text,
+        max_time,
+        difficulty_preference,
+        top_n,
+        max_calories,
+        max_missing,
+        only_cookable,
+    )
 
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
     summary_col1.metric("食譜資料筆數", len(recipes))
@@ -144,6 +169,11 @@ else:
 
     st.divider()
     st.subheader(f"內食食譜推薦前 {top_n} 名")
+    display_ingredients = ingredient_text.replace(chr(10), ", ").strip(", ") or "尚未輸入"
+    st.caption(f"目前食材：{display_ingredients}")
+
+    if result.empty:
+        st.warning("目前條件太嚴格，沒有找到符合的食譜。可以提高熱量上限、增加可缺少食材數，或取消只顯示現有食材足夠。")
 
     for rank, (_, row) in enumerate(result.iterrows(), start=1):
         with st.container(border=True):
@@ -156,6 +186,7 @@ else:
             col3.write(f"符合食材：{row['matched_ingredients'] or '無'}")
             col3.write(f"缺少食材：{row['missing_ingredients'] or '無'}")
             col4.metric("推薦分數", f"{row['score']}")
+            col4.write(f"缺少數：{row['missing_count']}")
             st.write(f"推薦理由：{row['reason']}")
 
     st.divider()

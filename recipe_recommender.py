@@ -26,7 +26,14 @@ def parse_ingredients(text):
     return {item.strip() for item in normalized.split(",") if item.strip()}
 
 
-def calculate_recipe_score(row, user_ingredients, max_time, difficulty_preference):
+def collect_ingredient_options(df):
+    ingredients = set()
+    for value in df["ingredients"]:
+        ingredients.update(parse_ingredients(value))
+    return sorted(ingredients)
+
+
+def calculate_recipe_score(row, user_ingredients, max_time, difficulty_preference, max_calories=None):
     recipe_ingredients = parse_ingredients(row["ingredients"])
     matched = sorted(recipe_ingredients & user_ingredients)
     missing = sorted(recipe_ingredients - user_ingredients)
@@ -51,8 +58,12 @@ def calculate_recipe_score(row, user_ingredients, max_time, difficulty_preferenc
     else:
         difficulty_score = 8
 
+    calorie_score = 10
+    if max_calories is not None and row["calories"] > max_calories:
+        calorie_score = max(0, 10 - ((row["calories"] - max_calories) / 50))
+
     missing_penalty = max(0, len(missing) - int(row["missing_allowed"])) * 5
-    score = ingredient_score + time_score + difficulty_score + 10 - missing_penalty
+    score = ingredient_score + time_score + difficulty_score + calorie_score - missing_penalty
 
     reasons = []
     if matched:
@@ -65,16 +76,34 @@ def calculate_recipe_score(row, user_ingredients, max_time, difficulty_preferenc
         reasons.append("烹飪時間符合需求")
     if difficulty_preference == "不限" or row["difficulty"] == difficulty_preference:
         reasons.append("難度符合偏好")
+    if max_calories is not None and row["calories"] <= max_calories:
+        reasons.append("熱量符合需求")
 
-    return round(max(score, 0), 2), "、".join(reasons), "、".join(matched), "、".join(missing)
+    return (
+        round(max(score, 0), 2),
+        "、".join(reasons),
+        "、".join(matched),
+        "、".join(missing),
+        len(matched),
+        len(missing),
+    )
 
 
-def recommend_recipes(df, ingredient_text, max_time, difficulty_preference, top_n=5):
+def recommend_recipes(
+    df,
+    ingredient_text,
+    max_time,
+    difficulty_preference,
+    top_n=5,
+    max_calories=None,
+    max_missing=None,
+    only_cookable=False,
+):
     user_ingredients = parse_ingredients(ingredient_text)
     results = df.copy()
 
     scores = results.apply(
-        lambda row: calculate_recipe_score(row, user_ingredients, max_time, difficulty_preference),
+        lambda row: calculate_recipe_score(row, user_ingredients, max_time, difficulty_preference, max_calories),
         axis=1,
     )
 
@@ -82,12 +111,21 @@ def recommend_recipes(df, ingredient_text, max_time, difficulty_preference, top_
     results["reason"] = scores.apply(lambda value: value[1])
     results["matched_ingredients"] = scores.apply(lambda value: value[2])
     results["missing_ingredients"] = scores.apply(lambda value: value[3])
-    results = results.sort_values(by=["score", "time"], ascending=[False, True])
+    results["matched_count"] = scores.apply(lambda value: value[4])
+    results["missing_count"] = scores.apply(lambda value: value[5])
 
+    if max_calories is not None:
+        results = results[results["calories"] <= max_calories]
+    if max_missing is not None:
+        results = results[results["missing_count"] <= max_missing]
+    if only_cookable:
+        results = results[results["missing_count"] == 0]
+
+    results = results.sort_values(by=["score", "matched_count", "time"], ascending=[False, False, True])
     return results.head(top_n)
 
 
 if __name__ == "__main__":
     recipes = load_recipes()
-    result = recommend_recipes(recipes, "雞蛋,白飯,蔥", 20, "簡單")
+    result = recommend_recipes(recipes, "雞蛋,白飯,蔥", 20, "簡單", max_calories=650, max_missing=2)
     print(result[["name", "category", "time", "difficulty", "score", "reason"]])

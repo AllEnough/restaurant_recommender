@@ -22,6 +22,12 @@ MOOD_STRATEGIES = {
 
 COMFORT_CATEGORIES = {"甜點", "飲料", "炸物", "小吃"}
 SOCIAL_CATEGORIES = {"火鍋", "燒肉", "鐵板燒", "日式", "義式", "韓式", "美式"}
+SORT_COLUMNS = {
+    "綜合推薦": ["score", "rating"],
+    "CP值優先": ["cp_score", "score"],
+    "距離最近": ["distance", "score"],
+    "評分最高": ["rating", "score"],
+}
 
 
 def load_data(file_path="restaurants.csv"):
@@ -32,11 +38,19 @@ def load_data(file_path="restaurants.csv"):
             numeric_columns.append(optional_column)
     for column in numeric_columns:
         df[column] = pd.to_numeric(df[column], errors="coerce")
-    return df.dropna(subset=numeric_columns)
+    df = df.dropna(subset=numeric_columns)
+    return df
 
 
 def get_mood_strategy(mood):
     return MOOD_STRATEGIES.get(mood, "依照一般綜合條件進行推薦。")
+
+
+def calculate_cp_score(row):
+    if row["price"] <= 0:
+        return 0
+    # 轉成容易閱讀的 0-100 分區間，價格越低且評分越高 CP 值越高。
+    return round(min((row["rating"] / row["price"]) * 1600, 100), 2)
 
 
 def calculate_mood_bonus(row, budget, max_distance, mood):
@@ -47,7 +61,7 @@ def calculate_mood_bonus(row, budget, max_distance, mood):
         if row["price"] <= budget * 0.75:
             bonus += 8
             reasons.append("省錢模式：價格更低")
-        if row["price"] > 0 and (row["rating"] / row["price"]) >= 0.04:
+        if calculate_cp_score(row) >= 70:
             bonus += 4
             reasons.append("省錢模式：CP值較高")
     elif mood == "疲累":
@@ -158,6 +172,13 @@ def calculate_score(
     return round(min(max(score, 0), 100), 2), "、".join(reasons)
 
 
+def sort_restaurants(results, sort_by):
+    if sort_by == "距離最近":
+        return results.sort_values(by=["distance", "score"], ascending=[True, False])
+    columns = SORT_COLUMNS.get(sort_by, SORT_COLUMNS["綜合推薦"])
+    return results.sort_values(by=columns, ascending=[False] * len(columns))
+
+
 def recommend_restaurants(
     df,
     budget,
@@ -169,8 +190,11 @@ def recommend_restaurants(
     max_spicy_level=5,
     prefer_fast=False,
     top_n=5,
+    sort_by="綜合推薦",
+    min_rating=0.0,
 ):
     results = df.copy()
+    results = results[results["rating"] >= min_rating]
 
     scores = results.apply(
         lambda row: calculate_score(
@@ -189,7 +213,8 @@ def recommend_restaurants(
 
     results["score"] = scores.apply(lambda x: x[0])
     results["reason"] = scores.apply(lambda x: x[1])
-    results = results.sort_values(by="score", ascending=False)
+    results["cp_score"] = results.apply(calculate_cp_score, axis=1)
+    results = sort_restaurants(results, sort_by)
 
     return results.head(top_n)
 
@@ -206,5 +231,7 @@ if __name__ == "__main__":
         need_takeout="不限",
         max_spicy_level=2,
         prefer_fast=True,
+        sort_by="綜合推薦",
+        min_rating=0,
     )
-    print(result[["name", "category", "price", "rating", "distance", "score", "reason"]])
+    print(result[["name", "category", "price", "rating", "distance", "cp_score", "score", "reason"]])
