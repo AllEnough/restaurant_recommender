@@ -1,4 +1,8 @@
+import html
+
+import folium
 import streamlit as st
+from streamlit_folium import st_folium
 
 from recommender import load_data, recommend_restaurants
 from recipe_recommender import load_recipes, recommend_recipes
@@ -61,6 +65,38 @@ if mode == "外食推薦":
             col3.write(f"辣度：{row['spicy_level']} / 5")
             col4.metric("推薦分數", f"{row['score']}")
             st.write(f"推薦理由：{row['reason']}")
+
+
+    st.divider()
+    st.subheader("推薦餐廳互動地圖")
+    map_data = result.dropna(subset=["latitude", "longitude"])
+    if map_data.empty:
+        st.info("目前餐廳資料尚未包含座標，無法顯示地圖。")
+    else:
+        center = [map_data["latitude"].mean(), map_data["longitude"].mean()]
+        restaurant_map = folium.Map(location=center, zoom_start=16, control_scale=True)
+
+        for rank, (_, row) in enumerate(map_data.iterrows(), start=1):
+            cp_value = row["rating"] / row["price"] * 100
+            popup_html = f"""
+            <b>{rank}. {html.escape(str(row['name']))}</b><br>
+            類型：{html.escape(str(row['category']))}<br>
+            平均價格：{row['price']} 元<br>
+            評分：{row['rating']}<br>
+            距離：{row['distance']} 分鐘<br>
+            推薦分數：{row['score']}<br>
+            CP值：{cp_value:.2f}<br>
+            推薦理由：{html.escape(str(row['reason']))}
+            """
+            marker_color = "red" if rank == 1 else "blue"
+            folium.Marker(
+                location=[row["latitude"], row["longitude"]],
+                tooltip=f"{rank}. {row['name']}｜{row['score']} 分",
+                popup=folium.Popup(popup_html, max_width=320),
+                icon=folium.Icon(color=marker_color, icon="cutlery", prefix="fa"),
+            ).add_to(restaurant_map)
+
+        st_folium(restaurant_map, use_container_width=True, height=500)
 
     st.divider()
     st.subheader("外食推薦結果視覺化")

@@ -16,6 +16,9 @@ WEIGHTS = {
 def load_data(file_path="restaurants.csv"):
     df = pd.read_csv(file_path)
     numeric_columns = ["price", "rating", "distance", "spicy_level"]
+    for optional_column in ["latitude", "longitude"]:
+        if optional_column in df.columns:
+            numeric_columns.append(optional_column)
     for column in numeric_columns:
         df[column] = pd.to_numeric(df[column], errors="coerce")
     return df.dropna(subset=numeric_columns)
