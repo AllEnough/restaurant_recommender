@@ -12,6 +12,17 @@ WEIGHTS = {
     "speed": 10,
 }
 
+MOOD_STRATEGIES = {
+    "省錢": "提高低價與 CP 值餐廳的分數，適合想控制花費的情境。",
+    "疲累": "提高近距離與快速出餐餐廳的分數，降低決策與等待成本。",
+    "開心": "提高高評分與適合聚餐類型的分數，偏向用餐體驗。",
+    "心情不好": "提高甜點、飲料、炸物等療癒型餐點的分數。",
+    "選擇困難": "維持綜合排序，並從高分餐廳中提供一筆驚喜推薦。",
+}
+
+COMFORT_CATEGORIES = {"甜點", "飲料", "炸物", "小吃"}
+SOCIAL_CATEGORIES = {"火鍋", "燒肉", "鐵板燒", "日式", "義式", "韓式", "美式"}
+
 
 def load_data(file_path="restaurants.csv"):
     df = pd.read_csv(file_path)
@@ -22,6 +33,46 @@ def load_data(file_path="restaurants.csv"):
     for column in numeric_columns:
         df[column] = pd.to_numeric(df[column], errors="coerce")
     return df.dropna(subset=numeric_columns)
+
+
+def get_mood_strategy(mood):
+    return MOOD_STRATEGIES.get(mood, "依照一般綜合條件進行推薦。")
+
+
+def calculate_mood_bonus(row, budget, max_distance, mood):
+    bonus = 0
+    reasons = []
+
+    if mood == "省錢":
+        if row["price"] <= budget * 0.75:
+            bonus += 8
+            reasons.append("省錢模式：價格更低")
+        if row["price"] > 0 and (row["rating"] / row["price"]) >= 0.04:
+            bonus += 4
+            reasons.append("省錢模式：CP值較高")
+    elif mood == "疲累":
+        if row["distance"] <= max_distance * 0.7:
+            bonus += 6
+            reasons.append("疲累模式：距離更近")
+        if row["serve_speed"] == "快":
+            bonus += 6
+            reasons.append("疲累模式：快速出餐")
+    elif mood == "開心":
+        if row["rating"] >= 4.3:
+            bonus += 6
+            reasons.append("開心模式：用餐評價佳")
+        if row["category"] in SOCIAL_CATEGORIES:
+            bonus += 5
+            reasons.append("開心模式：適合聚餐")
+    elif mood == "心情不好":
+        if row["category"] in COMFORT_CATEGORIES:
+            bonus += 8
+            reasons.append("療癒模式：餐點類型較放鬆")
+        if row["rating"] >= 4.2:
+            bonus += 3
+            reasons.append("療癒模式：評價穩定")
+
+    return bonus, reasons
 
 
 def calculate_score(
@@ -97,10 +148,14 @@ def calculate_score(
     else:
         score += WEIGHTS["speed"] * 0.5
 
+    mood_bonus, mood_reasons = calculate_mood_bonus(row, budget, max_distance, mood)
+    score += mood_bonus
+    reasons.extend(mood_reasons)
+
     if not reasons:
         reasons.append("綜合條件接近需求")
 
-    return round(max(score, 0), 2), "、".join(reasons)
+    return round(min(max(score, 0), 100), 2), "、".join(reasons)
 
 
 def recommend_restaurants(

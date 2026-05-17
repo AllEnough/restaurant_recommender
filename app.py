@@ -4,7 +4,7 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-from recommender import load_data, recommend_restaurants
+from recommender import get_mood_strategy, load_data, recommend_restaurants
 from recipe_recommender import load_recipes, recommend_recipes
 
 st.set_page_config(page_title="今天吃什麼", layout="wide")
@@ -25,7 +25,7 @@ if mode == "外食推薦":
     category = st.sidebar.selectbox("餐點類型", category_list)
 
     weather = st.sidebar.selectbox("目前天氣", ["普通", "熱", "冷", "雨天"])
-    mood = st.sidebar.selectbox("目前心情", ["省錢", "疲累", "開心", "心情不好"])
+    mood = st.sidebar.selectbox("目前心情", ["省錢", "疲累", "開心", "心情不好", "選擇困難"])
     need_takeout = st.sidebar.selectbox("是否需要外帶", ["不限", "yes", "no"])
     max_spicy_level = st.sidebar.slider("可接受辣度", 0, 5, 2)
     prefer_fast = st.sidebar.checkbox("希望快速出餐")
@@ -43,6 +43,12 @@ if mode == "外食推薦":
         prefer_fast,
         top_n,
     )
+
+    st.info(f"目前情緒策略：{get_mood_strategy(mood)}")
+
+    if mood == "選擇困難" and not result.empty:
+        surprise = result.sample(1, random_state=int(result["score"].sum() * 10)).iloc[0]
+        st.success(f"今日驚喜推薦：{surprise['name']}｜推薦分數 {surprise['score']}｜{surprise['reason']}")
 
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
     summary_col1.metric("餐廳資料筆數", len(df))
