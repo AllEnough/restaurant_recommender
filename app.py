@@ -1,4 +1,6 @@
+import hashlib
 import html
+from datetime import date
 
 import folium
 import streamlit as st
@@ -55,6 +57,51 @@ def render_favorites():
 
 
 render_favorites()
+
+
+def get_daily_index(seed_text, total):
+    if total <= 0:
+        return 0
+    seed = f"{date.today().isoformat()}-{seed_text}"
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) % total
+
+
+def build_restaurant_fortune(result, mood):
+    if result.empty:
+        return None
+    selected = result.iloc[get_daily_index(mood + "外食", len(result))]
+    messages = {
+        "省錢": "今天適合走精準省錢路線，把錢花在真正值得的一餐。",
+        "疲累": "今天先降低決策成本，近一點、快一點，就是好選擇。",
+        "開心": "今天可以選一間評價穩的店，把吃飯變成小小慶祝。",
+        "心情不好": "今天先照顧自己，選一個吃完會舒服一點的選項。",
+        "選擇困難": "今天交給系統決定，少想一點也不錯。",
+    }
+    return (
+        f"今日外食籤：{messages.get(mood, '今天適合選一個條件最平衡的餐廳。')}"
+        f"幸運餐點是 {selected['category']}，可以考慮 {selected['name']}。"
+    )
+
+
+def build_recipe_fortune(result, ingredient_text):
+    if result.empty:
+        return None
+    ingredients = sorted(parse_ingredients(ingredient_text))
+    seed_text = "".join(ingredients) or "內食"
+    selected = result.iloc[get_daily_index(seed_text, len(result))]
+    if selected["missing_count"] == 0:
+        hint = "現有食材已經夠用，今天可以直接開煮。"
+    elif selected["missing_count"] <= 1:
+        hint = "只差一點材料，補一樣就能做出完整料理。"
+    else:
+        hint = "可以先用現有食材做變化版，不一定要完全照食譜。"
+    return f"今日內食籤：{hint} 幸運料理是 {selected['name']}，預估 {selected['time']} 分鐘完成。"
+
+
+def render_daily_fortune(message):
+    if message:
+        st.success(message)
 
 
 def render_restaurant_card(rank, row):
@@ -248,6 +295,7 @@ if mode == "我要外食":
         summary_col4.metric("最高推薦分數", f"{result['score'].max():.1f}")
 
     render_restaurant_highlights(result)
+    render_daily_fortune(build_restaurant_fortune(result, mood))
 
     st.divider()
     st.subheader(f"外食推薦前 {top_n} 名")
@@ -332,6 +380,7 @@ else:
         st.success(f"本次幫你決定：{pick['name']}｜推薦分數 {pick['score']}｜{pick['reason']}")
 
     render_recipe_highlights(result)
+    render_daily_fortune(build_recipe_fortune(result, ingredient_text))
 
     st.subheader(f"內食食譜推薦前 {top_n} 名")
     display_ingredients = "、".join(sorted(parse_ingredients(ingredient_text))) or "尚未輸入"
