@@ -80,6 +80,16 @@ def render_restaurant_card(rank, row):
         st.write(f"推薦理由：{row['reason']}")
 
 
+def get_cp_marker_color(cp_score, rank):
+    if rank == 1:
+        return "red"
+    if cp_score >= 85:
+        return "green"
+    if cp_score >= 70:
+        return "orange"
+    return "blue"
+
+
 def render_restaurant_map(result):
     st.subheader("推薦餐廳地圖")
     map_data = result.dropna(subset=["latitude", "longitude"])
@@ -87,11 +97,12 @@ def render_restaurant_map(result):
         st.info("目前餐廳資料尚未包含座標，無法顯示地圖。")
         return
 
+    st.caption("圖針顏色：紅色＝本次第一名｜綠色＝高 CP 值｜橘色＝中高 CP 值｜藍色＝一般推薦")
     center = [map_data["latitude"].mean(), map_data["longitude"].mean()]
     restaurant_map = folium.Map(location=center, zoom_start=16, control_scale=True)
 
     for rank, (_, row) in enumerate(map_data.iterrows(), start=1):
-        cp_value = row["rating"] / row["price"] * 100
+        cp_score = float(row["cp_score"])
         popup_html = f"""
         <b>{rank}. {html.escape(str(row['name']))}</b><br>
         類型：{html.escape(str(row['category']))}<br>
@@ -99,18 +110,44 @@ def render_restaurant_map(result):
         評分：{row['rating']}<br>
         距離：{row['distance']} 分鐘<br>
         推薦分數：{row['score']}<br>
-        CP值：{cp_value:.2f}<br>
+        CP值：{cp_score:.2f}<br>
         推薦理由：{html.escape(str(row['reason']))}
         """
-        marker_color = "red" if rank == 1 else "blue"
+        marker_color = get_cp_marker_color(cp_score, rank)
         folium.Marker(
             location=[row["latitude"], row["longitude"]],
-            tooltip=f"{rank}. {row['name']}｜{row['score']} 分",
+            tooltip=f"{rank}. {row['name']}｜推薦 {row['score']} 分｜CP {cp_score:.1f}",
             popup=folium.Popup(popup_html, max_width=320),
             icon=folium.Icon(color=marker_color, icon="cutlery", prefix="fa"),
         ).add_to(restaurant_map)
 
     st_folium(restaurant_map, use_container_width=True, height=500)
+
+
+def render_restaurant_highlights(result):
+    if result.empty:
+        return
+    best_cp = result.sort_values(by=["cp_score", "score"], ascending=[False, False]).iloc[0]
+    nearest = result.sort_values(by=["distance", "score"], ascending=[True, False]).iloc[0]
+    best_rating = result.sort_values(by=["rating", "score"], ascending=[False, False]).iloc[0]
+    st.info(
+        f"本次推薦重點：最高 CP 值是 {best_cp['name']}（CP {best_cp['cp_score']}）；"
+        f"最近的是 {nearest['name']}（{nearest['distance']} 分鐘）；"
+        f"最高評分是 {best_rating['name']}（{best_rating['rating']} 分）。"
+    )
+
+
+def render_recipe_highlights(result):
+    if result.empty:
+        return
+    fastest = result.sort_values(by=["time", "score"], ascending=[True, False]).iloc[0]
+    best_match = result.sort_values(by=["missing_count", "matched_count", "score"], ascending=[True, False, False]).iloc[0]
+    lowest_calorie = result.sort_values(by=["calories", "score"], ascending=[True, False]).iloc[0]
+    st.info(
+        f"本次推薦重點：最快可完成的是 {fastest['name']}（{fastest['time']} 分鐘）；"
+        f"食材最接近的是 {best_match['name']}（缺少 {best_match['missing_count']} 項）；"
+        f"熱量最低的是 {lowest_calorie['name']}（{lowest_calorie['calories']} kcal）。"
+    )
 
 
 def render_recipe_card(rank, row):
@@ -210,6 +247,8 @@ if mode == "我要外食":
         summary_col3.metric("平均距離", f"{result['distance'].mean():.1f} 分鐘")
         summary_col4.metric("最高推薦分數", f"{result['score'].max():.1f}")
 
+    render_restaurant_highlights(result)
+
     st.divider()
     st.subheader(f"外食推薦前 {top_n} 名")
     if result.empty:
@@ -291,6 +330,8 @@ else:
     if st.session_state.recipe_decision is not None:
         pick = st.session_state.recipe_decision
         st.success(f"本次幫你決定：{pick['name']}｜推薦分數 {pick['score']}｜{pick['reason']}")
+
+    render_recipe_highlights(result)
 
     st.subheader(f"內食食譜推薦前 {top_n} 名")
     display_ingredients = "、".join(sorted(parse_ingredients(ingredient_text))) or "尚未輸入"
