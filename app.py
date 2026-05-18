@@ -177,18 +177,5 @@ else:
             st.write(f"推薦理由：{row['reason']}")
 
     st.divider()
-    st.subheader("食譜推薦結果視覺化")
-    st.bar_chart(result.set_index("name")["score"])
-
-    st.subheader("食譜資料分析")
-    chart_col1, chart_col2 = st.columns(2)
-    with chart_col1:
-        st.write("各類型食譜數量")
-        st.bar_chart(recipes["category"].value_counts())
-    with chart_col2:
-        st.write("各類型平均烹飪時間")
-        avg_time = recipes.groupby("category")["time"].mean().sort_values(ascending=False)
-        st.bar_chart(avg_time)
-
     st.subheader("完整食譜資料表")
     st.dataframe(recipes, use_container_width=True)
