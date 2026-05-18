@@ -104,6 +104,49 @@ def render_daily_fortune(message):
         st.success(message)
 
 
+def render_tags(tags):
+    if tags:
+        st.caption("標籤：" + "｜".join(tags))
+
+
+def get_restaurant_tags(row):
+    tags = []
+    if row["cp_score"] >= 85:
+        tags.append("高 CP")
+    elif row["cp_score"] >= 70:
+        tags.append("中高 CP")
+    if row["distance"] <= 5:
+        tags.append("近距離")
+    if row["serve_speed"] == "快":
+        tags.append("快速出餐")
+    if row["price"] <= 100:
+        tags.append("省錢友善")
+    if row["rating"] >= 4.3:
+        tags.append("評分高")
+    if row["spicy_level"] == 0:
+        tags.append("不辣")
+    if row["takeout"] == "yes":
+        tags.append("可外帶")
+    return tags[:5]
+
+
+def get_recipe_tags(row):
+    tags = []
+    if row["time"] <= 15:
+        tags.append("快速料理")
+    if row["missing_count"] == 0:
+        tags.append("食材足夠")
+    elif row["missing_count"] <= 1:
+        tags.append("少買食材")
+    if row["calories"] <= 350:
+        tags.append("低熱量")
+    if row["difficulty"] == "簡單":
+        tags.append("新手友善")
+    if row["matched_count"] >= 3:
+        tags.append("食材符合高")
+    return tags[:5]
+
+
 def render_restaurant_card(rank, row):
     with st.container(border=True):
         title_col, action_col, score_col = st.columns([3.5, 1, 1])
@@ -114,6 +157,7 @@ def render_restaurant_card(rank, row):
             add_favorite("restaurant", row["name"])
             st.rerun()
         score_col.metric("推薦分數", f"{row['score']}")
+        render_tags(get_restaurant_tags(row))
 
         info_col1, info_col2, info_col3, info_col4 = st.columns(4)
         info_col1.write(f"類型：{row['category']}")
@@ -197,6 +241,127 @@ def render_recipe_highlights(result):
     )
 
 
+def render_restaurant_comparison(result):
+    if len(result) < 2:
+        return
+
+    with st.expander("比較兩個外食選項", expanded=False):
+        names = result["name"].tolist()
+        left_col, right_col = st.columns(2)
+        left_name = left_col.selectbox("選項 A", names, index=0, key="restaurant_compare_left")
+        right_name = right_col.selectbox("選項 B", names, index=1, key="restaurant_compare_right")
+
+        left = result[result["name"] == left_name].iloc[0]
+        right = result[result["name"] == right_name].iloc[0]
+        comparison = {
+            "比較項目": ["推薦分數", "平均價格", "距離", "評分", "CP 值", "出餐速度", "外帶"],
+            left_name: [
+                left["score"],
+                f"{left['price']} 元",
+                f"{left['distance']} 分鐘",
+                left["rating"],
+                left["cp_score"],
+                left["serve_speed"],
+                left["takeout"],
+            ],
+            right_name: [
+                right["score"],
+                f"{right['price']} 元",
+                f"{right['distance']} 分鐘",
+                right["rating"],
+                right["cp_score"],
+                right["serve_speed"],
+                right["takeout"],
+            ],
+        }
+        st.dataframe(comparison, hide_index=True, use_container_width=True)
+
+        if left["score"] > right["score"]:
+            st.success(f"綜合分數較推薦：{left_name}")
+        elif right["score"] > left["score"]:
+            st.success(f"綜合分數較推薦：{right_name}")
+        else:
+            st.info("兩個選項綜合分數相同，可以改看距離、價格或 CP 值。")
+
+
+def render_recipe_comparison(result):
+    if len(result) < 2:
+        return
+
+    with st.expander("比較兩個內食選項", expanded=False):
+        names = result["name"].tolist()
+        left_col, right_col = st.columns(2)
+        left_name = left_col.selectbox("選項 A", names, index=0, key="recipe_compare_left")
+        right_name = right_col.selectbox("選項 B", names, index=1, key="recipe_compare_right")
+
+        left = result[result["name"] == left_name].iloc[0]
+        right = result[result["name"] == right_name].iloc[0]
+        comparison = {
+            "比較項目": ["推薦分數", "料理時間", "熱量", "難度", "符合食材數", "缺少食材數", "缺少食材"],
+            left_name: [
+                left["score"],
+                f"{left['time']} 分鐘",
+                f"{left['calories']} kcal",
+                left["difficulty"],
+                left["matched_count"],
+                left["missing_count"],
+                left["missing_ingredients"] or "無",
+            ],
+            right_name: [
+                right["score"],
+                f"{right['time']} 分鐘",
+                f"{right['calories']} kcal",
+                right["difficulty"],
+                right["matched_count"],
+                right["missing_count"],
+                right["missing_ingredients"] or "無",
+            ],
+        }
+        st.dataframe(comparison, hide_index=True, use_container_width=True)
+
+        if left["missing_count"] < right["missing_count"]:
+            st.success(f"食材準備較容易：{left_name}")
+        elif right["missing_count"] < left["missing_count"]:
+            st.success(f"食材準備較容易：{right_name}")
+        elif left["time"] < right["time"]:
+            st.success(f"時間較快：{left_name}")
+        elif right["time"] < left["time"]:
+            st.success(f"時間較快：{right_name}")
+        else:
+            st.info("兩個選項條件接近，可以依照今天想吃的口味決定。")
+
+
+def render_shopping_list(result):
+    if result.empty:
+        return
+
+    missing_counts = {}
+    for value in result["missing_ingredients"]:
+        for ingredient in parse_ingredients(value):
+            missing_counts[ingredient] = missing_counts.get(ingredient, 0) + 1
+
+    with st.expander("缺少食材購物清單", expanded=False):
+        if not missing_counts:
+            st.success("目前推薦食譜都不缺食材，可以直接開始料理。")
+            return
+
+        shopping_rows = [
+            {"缺少食材": ingredient, "出現次數": count}
+            for ingredient, count in sorted(missing_counts.items(), key=lambda item: (-item[1], item[0]))
+        ]
+        st.caption("依照目前推薦結果統計，出現次數越高，代表越常是推薦食譜會用到但你目前沒有的食材。")
+        st.dataframe(shopping_rows, hide_index=True, use_container_width=True)
+
+        names = result["name"].tolist()
+        selected_name = st.selectbox("查看單一道食譜需要補買什麼", names, key="shopping_recipe_select")
+        selected = result[result["name"] == selected_name].iloc[0]
+        missing_items = sorted(parse_ingredients(selected["missing_ingredients"]))
+        if missing_items:
+            st.write("、".join(missing_items))
+        else:
+            st.success(f"{selected_name} 目前不需要補買食材。")
+
+
 def render_recipe_card(rank, row):
     with st.container(border=True):
         title_col, action_col, score_col = st.columns([3.5, 1, 1])
@@ -207,6 +372,7 @@ def render_recipe_card(rank, row):
             add_favorite("recipe", row["name"])
             st.rerun()
         score_col.metric("推薦分數", f"{row['score']}")
+        render_tags(get_recipe_tags(row))
 
         info_col1, info_col2, info_col3, info_col4 = st.columns(4)
         info_col1.write(f"類型：{row['category']}")
@@ -296,6 +462,7 @@ if mode == "我要外食":
 
     render_restaurant_highlights(result)
     render_daily_fortune(build_restaurant_fortune(result, mood))
+    render_restaurant_comparison(result)
 
     st.divider()
     st.subheader(f"外食推薦前 {top_n} 名")
@@ -381,6 +548,8 @@ else:
 
     render_recipe_highlights(result)
     render_daily_fortune(build_recipe_fortune(result, ingredient_text))
+    render_recipe_comparison(result)
+    render_shopping_list(result)
 
     st.subheader(f"內食食譜推薦前 {top_n} 名")
     display_ingredients = "、".join(sorted(parse_ingredients(ingredient_text))) or "尚未輸入"
