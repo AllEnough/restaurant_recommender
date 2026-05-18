@@ -19,11 +19,42 @@ mode = st.radio(
     label_visibility="visible",
 )
 
+if "favorite_restaurants" not in st.session_state:
+    st.session_state.favorite_restaurants = []
+if "favorite_recipes" not in st.session_state:
+    st.session_state.favorite_recipes = []
+
+
+def add_favorite(kind, name):
+    key = "favorite_restaurants" if kind == "restaurant" else "favorite_recipes"
+    if name not in st.session_state[key]:
+        st.session_state[key].append(name)
+
+
+def render_favorites():
+    with st.sidebar.expander("我的收藏", expanded=False):
+        if st.session_state.favorite_restaurants:
+            st.write("外食收藏")
+            for item in st.session_state.favorite_restaurants:
+                st.write(f"- {item}")
+        if st.session_state.favorite_recipes:
+            st.write("內食收藏")
+            for item in st.session_state.favorite_recipes:
+                st.write(f"- {item}")
+        if not st.session_state.favorite_restaurants and not st.session_state.favorite_recipes:
+            st.caption("目前還沒有收藏。")
+
+
+render_favorites()
+
 
 def render_restaurant_card(rank, row):
     with st.container(border=True):
-        title_col, score_col = st.columns([4, 1])
+        title_col, action_col, score_col = st.columns([3.5, 1, 1])
         title_col.markdown(f"### {rank}. {row['name']}")
+        if action_col.button("收藏", key=f"restaurant_fav_{rank}_{row['name']}"):
+            add_favorite("restaurant", row["name"])
+            st.toast(f"已收藏：{row['name']}")
         score_col.metric("推薦分數", f"{row['score']}")
 
         info_col1, info_col2, info_col3, info_col4 = st.columns(4)
@@ -73,8 +104,11 @@ def render_restaurant_map(result):
 
 def render_recipe_card(rank, row):
     with st.container(border=True):
-        title_col, score_col = st.columns([4, 1])
+        title_col, action_col, score_col = st.columns([3.5, 1, 1])
         title_col.markdown(f"### {rank}. {row['name']}")
+        if action_col.button("收藏", key=f"recipe_fav_{rank}_{row['name']}"):
+            add_favorite("recipe", row["name"])
+            st.toast(f"已收藏：{row['name']}")
         score_col.metric("推薦分數", f"{row['score']}")
 
         info_col1, info_col2, info_col3, info_col4 = st.columns(4)
@@ -127,6 +161,10 @@ if mode == "我要外食":
 
     st.info(f"目前情緒策略：{get_mood_strategy(mood)}")
     st.caption(f"排序方式：{sort_by}｜最低評分：{min_rating:.1f}｜顯示 {top_n} 筆")
+
+    if st.button("幫我決定今天吃哪間", disabled=result.empty):
+        pick = result.sample(1).iloc[0]
+        st.success(f"本次幫你決定：{pick['name']}｜推薦分數 {pick['score']}｜{pick['reason']}")
 
     if mood == "選擇困難" and not result.empty:
         surprise = result.sample(1, random_state=int(result["score"].sum() * 10)).iloc[0]
@@ -196,6 +234,10 @@ else:
     summary_col4.metric("食譜類型", recipes["category"].nunique())
 
     st.divider()
+    if st.button("幫我決定今天煮什麼", disabled=result.empty):
+        pick = result.sample(1).iloc[0]
+        st.success(f"本次幫你決定：{pick['name']}｜推薦分數 {pick['score']}｜{pick['reason']}")
+
     st.subheader(f"內食食譜推薦前 {top_n} 名")
     display_ingredients = ingredient_text.replace(chr(10), ", ").strip(", ") or "尚未輸入"
     st.caption(f"目前食材：{display_ingredients}")
