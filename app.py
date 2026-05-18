@@ -111,19 +111,6 @@ if mode == "外食推薦":
         st_folium(restaurant_map, use_container_width=True, height=500)
 
     st.divider()
-    st.subheader("外食推薦結果視覺化")
-    st.bar_chart(result.set_index("name")["score"])
-
-    st.subheader("餐廳資料分析")
-    chart_col1, chart_col2 = st.columns(2)
-    with chart_col1:
-        st.write("各類型餐廳數量")
-        st.bar_chart(df["category"].value_counts())
-    with chart_col2:
-        st.write("各類型平均價格")
-        avg_price = df.groupby("category")["price"].mean().sort_values(ascending=False)
-        st.bar_chart(avg_price)
-
     st.subheader("完整餐廳資料表")
     st.dataframe(df, use_container_width=True)
 
