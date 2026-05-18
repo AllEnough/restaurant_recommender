@@ -5,7 +5,7 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 from recommender import get_mood_strategy, load_data, recommend_restaurants
-from recipe_recommender import collect_ingredient_options, load_recipes, recommend_recipes
+from recipe_recommender import collect_ingredient_options, load_recipes, parse_ingredients, recommend_recipes
 
 st.set_page_config(page_title="今天吃什麼", layout="wide")
 
@@ -23,6 +23,10 @@ if "favorite_restaurants" not in st.session_state:
     st.session_state.favorite_restaurants = []
 if "favorite_recipes" not in st.session_state:
     st.session_state.favorite_recipes = []
+if "restaurant_decision" not in st.session_state:
+    st.session_state.restaurant_decision = None
+if "recipe_decision" not in st.session_state:
+    st.session_state.recipe_decision = None
 
 
 def add_favorite(kind, name):
@@ -43,6 +47,11 @@ def render_favorites():
                 st.write(f"- {item}")
         if not st.session_state.favorite_restaurants and not st.session_state.favorite_recipes:
             st.caption("目前還沒有收藏。")
+        if st.session_state.favorite_restaurants or st.session_state.favorite_recipes:
+            if st.button("清空收藏"):
+                st.session_state.favorite_restaurants = []
+                st.session_state.favorite_recipes = []
+                st.rerun()
 
 
 render_favorites()
@@ -52,9 +61,11 @@ def render_restaurant_card(rank, row):
     with st.container(border=True):
         title_col, action_col, score_col = st.columns([3.5, 1, 1])
         title_col.markdown(f"### {rank}. {row['name']}")
-        if action_col.button("收藏", key=f"restaurant_fav_{rank}_{row['name']}"):
+        if row["name"] in st.session_state.favorite_restaurants:
+            action_col.button("已收藏", key=f"restaurant_fav_{rank}_{row['name']}", disabled=True)
+        elif action_col.button("收藏", key=f"restaurant_fav_{rank}_{row['name']}"):
             add_favorite("restaurant", row["name"])
-            st.toast(f"已收藏：{row['name']}")
+            st.rerun()
         score_col.metric("推薦分數", f"{row['score']}")
 
         info_col1, info_col2, info_col3, info_col4 = st.columns(4)
@@ -106,9 +117,11 @@ def render_recipe_card(rank, row):
     with st.container(border=True):
         title_col, action_col, score_col = st.columns([3.5, 1, 1])
         title_col.markdown(f"### {rank}. {row['name']}")
-        if action_col.button("收藏", key=f"recipe_fav_{rank}_{row['name']}"):
+        if row["name"] in st.session_state.favorite_recipes:
+            action_col.button("已收藏", key=f"recipe_fav_{rank}_{row['name']}", disabled=True)
+        elif action_col.button("收藏", key=f"recipe_fav_{rank}_{row['name']}"):
             add_favorite("recipe", row["name"])
-            st.toast(f"已收藏：{row['name']}")
+            st.rerun()
         score_col.metric("推薦分數", f"{row['score']}")
 
         info_col1, info_col2, info_col3, info_col4 = st.columns(4)
@@ -159,22 +172,43 @@ if mode == "我要外食":
         min_rating,
     )
 
+    if st.session_state.restaurant_decision is not None:
+        current_names = set(result["name"].tolist())
+        if st.session_state.restaurant_decision["name"] not in current_names:
+            st.session_state.restaurant_decision = None
+
     st.info(f"目前情緒策略：{get_mood_strategy(mood)}")
     st.caption(f"排序方式：{sort_by}｜最低評分：{min_rating:.1f}｜顯示 {top_n} 筆")
 
-    if st.button("幫我決定今天吃哪間", disabled=result.empty):
+    decision_col, clear_decision_col, _ = st.columns([1.2, 1.2, 3])
+    if decision_col.button("幫我決定", disabled=result.empty, help="從目前推薦結果中隨機選一間"):
         pick = result.sample(1).iloc[0]
+        st.session_state.restaurant_decision = {
+            "name": pick["name"],
+            "score": pick["score"],
+            "reason": pick["reason"],
+        }
+    if clear_decision_col.button("清除決定", disabled=st.session_state.restaurant_decision is None):
+        st.session_state.restaurant_decision = None
+    if st.session_state.restaurant_decision is not None:
+        pick = st.session_state.restaurant_decision
         st.success(f"本次幫你決定：{pick['name']}｜推薦分數 {pick['score']}｜{pick['reason']}")
 
     if mood == "選擇困難" and not result.empty:
         surprise = result.sample(1, random_state=int(result["score"].sum() * 10)).iloc[0]
         st.success(f"今日驚喜推薦：{surprise['name']}｜推薦分數 {surprise['score']}｜{surprise['reason']}")
 
+
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
-    summary_col1.metric("餐廳資料筆數", len(df))
-    summary_col2.metric("平均價格", f"{df['price'].mean():.0f} 元")
-    summary_col3.metric("平均評分", f"{df['rating'].mean():.2f}")
-    summary_col4.metric("餐點類型", df["category"].nunique())
+    summary_col1.metric("本次推薦筆數", len(result))
+    if result.empty:
+        summary_col2.metric("平均價格", "--")
+        summary_col3.metric("平均距離", "--")
+        summary_col4.metric("最高推薦分數", "--")
+    else:
+        summary_col2.metric("平均價格", f"{result['price'].mean():.0f} 元")
+        summary_col3.metric("平均距離", f"{result['distance'].mean():.1f} 分鐘")
+        summary_col4.metric("最高推薦分數", f"{result['score'].max():.1f}")
 
     st.divider()
     st.subheader(f"外食推薦前 {top_n} 名")
@@ -227,19 +261,39 @@ else:
         only_cookable,
     )
 
+    if st.session_state.recipe_decision is not None:
+        current_recipe_names = set(result["name"].tolist())
+        if st.session_state.recipe_decision["name"] not in current_recipe_names:
+            st.session_state.recipe_decision = None
+
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
-    summary_col1.metric("食譜資料筆數", len(recipes))
-    summary_col2.metric("平均時間", f"{recipes['time'].mean():.0f} 分鐘")
-    summary_col3.metric("平均熱量", f"{recipes['calories'].mean():.0f} kcal")
-    summary_col4.metric("食譜類型", recipes["category"].nunique())
+    summary_col1.metric("本次推薦筆數", len(result))
+    if result.empty:
+        summary_col2.metric("平均時間", "--")
+        summary_col3.metric("平均熱量", "--")
+        summary_col4.metric("最高推薦分數", "--")
+    else:
+        summary_col2.metric("平均時間", f"{result['time'].mean():.0f} 分鐘")
+        summary_col3.metric("平均熱量", f"{result['calories'].mean():.0f} kcal")
+        summary_col4.metric("最高推薦分數", f"{result['score'].max():.1f}")
 
     st.divider()
-    if st.button("幫我決定今天煮什麼", disabled=result.empty):
+    decision_col, clear_decision_col, _ = st.columns([1.2, 1.2, 3])
+    if decision_col.button("幫我決定", disabled=result.empty, help="從目前推薦食譜中隨機選一道"):
         pick = result.sample(1).iloc[0]
+        st.session_state.recipe_decision = {
+            "name": pick["name"],
+            "score": pick["score"],
+            "reason": pick["reason"],
+        }
+    if clear_decision_col.button("清除決定", disabled=st.session_state.recipe_decision is None):
+        st.session_state.recipe_decision = None
+    if st.session_state.recipe_decision is not None:
+        pick = st.session_state.recipe_decision
         st.success(f"本次幫你決定：{pick['name']}｜推薦分數 {pick['score']}｜{pick['reason']}")
 
     st.subheader(f"內食食譜推薦前 {top_n} 名")
-    display_ingredients = ingredient_text.replace(chr(10), ", ").strip(", ") or "尚未輸入"
+    display_ingredients = "、".join(sorted(parse_ingredients(ingredient_text))) or "尚未輸入"
     st.caption(f"目前食材：{display_ingredients}")
 
     if result.empty:
