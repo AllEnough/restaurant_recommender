@@ -467,6 +467,43 @@ def inject_design_system():
             margin-bottom: 1rem;
         }
 
+        .decision-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin: 0.8rem 0 1rem;
+        }
+
+        .decision-tile {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 0.9rem 1rem;
+        }
+
+        .decision-tile__label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 900;
+            margin-bottom: 0.35rem;
+        }
+
+        .decision-tile__value {
+            color: var(--ink);
+            font-size: 0.95rem;
+            font-weight: 800;
+            line-height: 1.5;
+        }
+
+        .nudge-box {
+            border: 1px solid #f7c59f;
+            border-radius: 12px;
+            background: #fff8ef;
+            padding: 1rem 1.1rem;
+            color: #6b4a2d;
+            margin: 0.75rem 0 1rem;
+        }
+
         .tag-row {
             display: flex;
             flex-wrap: wrap;
@@ -704,7 +741,8 @@ def inject_design_system():
                 padding: 1rem;
             }
             .dashboard-grid,
-            .explain-grid {
+            .explain-grid,
+            .decision-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -1829,12 +1867,115 @@ def index_of(options, value, fallback=0):
         return fallback
 
 
+def format_score_delta(current, previous):
+    try:
+        return f"{float(current) - float(previous):+.1f}"
+    except (TypeError, ValueError):
+        return "--"
+
+
+def get_restaurant_persona(row):
+    personas = []
+    if row.get("price", 999) <= 120 or row.get("cp_score", 0) >= 80:
+        personas.append("預算有限者")
+    if row.get("distance", 99) <= 6 or row.get("serve_speed") == "快":
+        personas.append("趕時間者")
+    if row.get("review_risk") == "低" or row.get("rating", 0) >= 4.3:
+        personas.append("怕踩雷者")
+    if row.get("takeout") == "yes":
+        personas.append("外帶族")
+    if not personas:
+        personas.append("一般外食族")
+    return "、".join(personas[:3])
+
+
+def get_restaurant_decision_tradeoff(best, second=None):
+    strengths = []
+    if best.get("price", 999) <= 120:
+        strengths.append("價格較友善")
+    if best.get("distance", 99) <= 6:
+        strengths.append("距離近")
+    if best.get("rating", 0) >= 4.2:
+        strengths.append("評分穩定")
+    if best.get("review_risk") == "低":
+        strengths.append("評論風險低")
+    if best.get("serve_speed") == "快":
+        strengths.append("出餐速度快")
+    if not strengths:
+        strengths.append("整體條件平均")
+
+    if second is None:
+        return "、".join(strengths[:3])
+
+    comparisons = []
+    if best.get("price", 999) < second.get("price", 999):
+        comparisons.append(f"比 {second['name']} 便宜 {int(second['price'] - best['price'])} 元")
+    if best.get("distance", 99) < second.get("distance", 99):
+        comparisons.append(f"比 {second['name']} 近 {second['distance'] - best['distance']:.1f} 分鐘")
+    if best.get("negative_ratio", 100) < second.get("negative_ratio", 100):
+        comparisons.append(f"負評比例低 {second['negative_ratio'] - best['negative_ratio']:.1f}%")
+    if best.get("rating", 0) > second.get("rating", 0):
+        comparisons.append(f"評分高 {best['rating'] - second['rating']:.1f}")
+    if comparisons:
+        return "；".join(comparisons[:2])
+    return "、".join(strengths[:3])
+
+
+def get_recipe_persona(row):
+    personas = []
+    if row.get("missing_count", 99) == 0:
+        personas.append("不想出門者")
+    if row.get("time", 99) <= 15:
+        personas.append("趕時間者")
+    if row.get("calories", 999) <= 450:
+        personas.append("控制熱量者")
+    if row.get("priority_bonus", 0) > 0:
+        personas.append("清冰箱者")
+    if row.get("difficulty") == "簡單":
+        personas.append("料理新手")
+    if not personas:
+        personas.append("一般內食族")
+    return "、".join(personas[:3])
+
+
+def get_recipe_decision_tradeoff(best, second=None):
+    strengths = []
+    if best.get("missing_count", 99) == 0:
+        strengths.append("現有食材可直接完成")
+    if best.get("time", 99) <= 20:
+        strengths.append("料理時間短")
+    if best.get("calories", 999) <= 500:
+        strengths.append("熱量較低")
+    if best.get("priority_bonus", 0) > 0:
+        strengths.append("能消耗高優先食材")
+    if not strengths:
+        strengths.append("食材與條件整體匹配")
+
+    if second is None:
+        return "、".join(strengths[:3])
+
+    comparisons = []
+    if best.get("missing_count", 99) < second.get("missing_count", 99):
+        comparisons.append(f"比 {second['name']} 少缺 {int(second['missing_count'] - best['missing_count'])} 種食材")
+    if best.get("time", 99) < second.get("time", 99):
+        comparisons.append(f"比 {second['name']} 快 {int(second['time'] - best['time'])} 分鐘")
+    if best.get("calories", 999) < second.get("calories", 999):
+        comparisons.append(f"熱量少 {int(second['calories'] - best['calories'])} kcal")
+    if best.get("priority_bonus", 0) > second.get("priority_bonus", 0):
+        comparisons.append("更能消耗高優先食材")
+    if comparisons:
+        return "；".join(comparisons[:2])
+    return "、".join(strengths[:3])
+
+
 def render_restaurant_decision_summary(result, smart_mode, weather, meal_time, use_review_analysis):
     if result.empty:
         return
 
     final_column = "final_score" if "final_score" in result.columns else "score"
-    best = result.sort_values(by=[final_column], ascending=False).iloc[0]
+    sorted_result = result.sort_values(by=[final_column], ascending=False)
+    best = sorted_result.iloc[0]
+    second = sorted_result.iloc[1] if len(sorted_result) > 1 else None
     review_risk = best.get("review_risk", "未知")
     negative_ratio = best.get("negative_ratio", 0)
     review_text = (
@@ -1855,6 +1996,27 @@ def render_restaurant_decision_summary(result, smart_mode, weather, meal_time, u
         "</div>",
         unsafe_allow_html=True,
     )
+    second_text = "目前沒有第二名可比較。"
+    if second is not None:
+        delta = format_score_delta(best.get(final_column), second.get(final_column))
+        second_text = f"第二名是 {second['name']}，分數差距 {delta}。{get_restaurant_decision_tradeoff(best, second)}。"
+    st.markdown(
+        "<div class='decision-grid'>"
+        "<div class='decision-tile'>"
+        "<div class='decision-tile__label'>適合族群</div>"
+        f"<div class='decision-tile__value'>{html.escape(get_restaurant_persona(best))}</div>"
+        "</div>"
+        "<div class='decision-tile'>"
+        "<div class='decision-tile__label'>關鍵取捨</div>"
+        f"<div class='decision-tile__value'>{html.escape(get_restaurant_decision_tradeoff(best, second))}</div>"
+        "</div>"
+        "<div class='decision-tile'>"
+        "<div class='decision-tile__label'>為什麼不是第二名</div>"
+        f"<div class='decision-tile__value'>{html.escape(second_text)}</div>"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_recipe_decision_summary(result, smart_mode, current_ingredients):
@@ -1862,7 +2024,9 @@ def render_recipe_decision_summary(result, smart_mode, current_ingredients):
         return
 
     score_column = "final_score" if "final_score" in result.columns else "score"
-    best = result.sort_values(by=[score_column], ascending=False).iloc[0]
+    sorted_result = result.sort_values(by=[score_column], ascending=False)
+    best = sorted_result.iloc[0]
+    second = sorted_result.iloc[1] if len(sorted_result) > 1 else None
     ingredient_text = "、".join(current_ingredients) or "尚未輸入"
     missing_text = best.get("missing_ingredients", "") or "無"
     st.markdown(
@@ -1876,6 +2040,75 @@ def render_recipe_decision_summary(result, smart_mode, current_ingredients):
         "</div>",
         unsafe_allow_html=True,
     )
+    second_text = "目前沒有第二名可比較。"
+    if second is not None:
+        delta = format_score_delta(best.get(score_column), second.get(score_column))
+        second_text = f"第二名是 {second['name']}，分數差距 {delta}。{get_recipe_decision_tradeoff(best, second)}。"
+    st.markdown(
+        "<div class='decision-grid'>"
+        "<div class='decision-tile'>"
+        "<div class='decision-tile__label'>適合族群</div>"
+        f"<div class='decision-tile__value'>{html.escape(get_recipe_persona(best))}</div>"
+        "</div>"
+        "<div class='decision-tile'>"
+        "<div class='decision-tile__label'>關鍵取捨</div>"
+        f"<div class='decision-tile__value'>{html.escape(get_recipe_decision_tradeoff(best, second))}</div>"
+        "</div>"
+        "<div class='decision-tile'>"
+        "<div class='decision-tile__label'>為什麼不是第二名</div>"
+        f"<div class='decision-tile__value'>{html.escape(second_text)}</div>"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_restaurant_empty_guidance(candidate_result, evaluation_baseline, filters):
+    st.markdown(
+        "<div class='nudge-box'><b>系統放寬建議：</b>目前不是資料不存在，而是條件可能太嚴格。"
+        "可以依照下列方向快速調整。</div>",
+        unsafe_allow_html=True,
+    )
+    suggestions = []
+    if candidate_result.empty:
+        suggestions.append("放寬預算或距離，因為基礎條件已經沒有餐廳通過。")
+        suggestions.append("把餐點類型改成不限，先看附近有什麼可行選項。")
+        if filters["min_rating"] >= 4:
+            suggestions.append("最低評分可先降到 3.8，再交給評論分析避雷。")
+    else:
+        if filters["use_review_analysis"] and not evaluation_baseline.empty:
+            avg_negative = evaluation_baseline["negative_ratio"].mean()
+            suggestions.append(
+                f"目前候選餐廳平均負評比例約 {avg_negative:.1f}%，可把可接受負評比例提高 10% 觀察。"
+            )
+        if filters["hide_high_risk"]:
+            suggestions.append("暫時取消隱藏高風險評論餐廳，改用評論摘要人工確認。")
+        if filters["top_n"] <= 5:
+            suggestions.append("推薦筆數可提高到 8 到 10 筆，讓系統保留更多候選。")
+    for item in suggestions[:4]:
+        st.write(f"- {item}")
+
+
+def render_recipe_empty_guidance(candidate_result, filters):
+    st.markdown(
+        "<div class='nudge-box'><b>系統放寬建議：</b>目前條件可能讓可行食譜被排除。"
+        "可以先用下面的方式找回候選，再慢慢收斂。</div>",
+        unsafe_allow_html=True,
+    )
+    suggestions = []
+    if candidate_result.empty:
+        suggestions.append("增加最多可缺少食材數，先找出接近可做的食譜。")
+        suggestions.append("把料理難度改成不限，避免簡單食譜資料不足。")
+        suggestions.append("提高烹飪時間上限到 30 或 40 分鐘。")
+    else:
+        if filters["only_cookable"]:
+            suggestions.append("取消只顯示現有食材足夠，讓系統列出少量採買就能完成的食譜。")
+        if filters["max_calories"] <= 450:
+            suggestions.append("熱量上限可先提高 100 kcal，避免排除份量正常的餐點。")
+        if filters["max_missing"] <= 1:
+            suggestions.append("最多可缺少食材數可提高到 2，通常只需要補買一兩樣。")
+    for item in suggestions[:4]:
+        st.write(f"- {item}")
 
 
 def render_restaurant_decision_dashboard(result, all_restaurants, review_analysis, use_review_analysis):
@@ -2567,6 +2800,16 @@ if mode == "我要外食":
     st.subheader(f"外食決策建議前 {top_n} 名")
     if result.empty:
         st.warning("目前條件太嚴格，沒有找到符合的餐廳。可以降低最低評分、放寬距離或調整餐點類型。")
+        render_restaurant_empty_guidance(
+            candidate_result,
+            evaluation_baseline,
+            {
+                "min_rating": min_rating,
+                "use_review_analysis": use_review_analysis,
+                "hide_high_risk": hide_high_risk,
+                "top_n": top_n,
+            },
+        )
     for rank, (_, row) in enumerate(result.iterrows(), start=1):
         render_restaurant_card(rank, row)
 
@@ -2728,6 +2971,14 @@ else:
 
     if result.empty:
         st.warning("目前條件太嚴格，沒有找到符合的食譜。可以提高熱量上限、增加可缺少食材數，或取消只顯示現有食材足夠。")
+        render_recipe_empty_guidance(
+            candidate_result,
+            {
+                "only_cookable": only_cookable,
+                "max_calories": max_calories,
+                "max_missing": max_missing,
+            },
+        )
     for rank, (_, row) in enumerate(result.iterrows(), start=1):
         render_recipe_card(rank, row)
 
