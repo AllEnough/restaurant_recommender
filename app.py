@@ -1,14 +1,21 @@
 import hashlib
 import html
-from datetime import date
+from datetime import date, datetime
 
 import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-from recommender import calculate_score_breakdown, get_mood_strategy, load_data, recommend_restaurants
+from recommender import (
+    calculate_score_breakdown,
+    get_meal_time_strategy,
+    get_mood_strategy,
+    load_data,
+    recommend_restaurants,
+)
 from recipe_recommender import collect_ingredient_options, load_recipes, parse_ingredients, recommend_recipes
 from review_analyzer import analyze_reviews, load_reviews, merge_review_analysis
+from weather_service import fetch_current_weather
 
 st.set_page_config(page_title="智慧飲食決策系統", layout="wide")
 
@@ -857,6 +864,25 @@ def render_favorites():
 render_favorites()
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def get_cached_weather(location):
+    return fetch_current_weather(location)
+
+
+def detect_meal_time(current_time=None):
+    now = current_time or datetime.now()
+    minutes = now.hour * 60 + now.minute
+    if 5 * 60 <= minutes < 10 * 60 + 30:
+        return "早餐"
+    if 10 * 60 + 30 <= minutes < 14 * 60:
+        return "午餐"
+    if 14 * 60 <= minutes < 17 * 60:
+        return "下午茶"
+    if 17 * 60 <= minutes < 21 * 60:
+        return "晚餐"
+    return "宵夜"
+
+
 def get_daily_index(seed_text, total):
     if total <= 0:
         return 0
@@ -1083,6 +1109,7 @@ def render_restaurant_model_explainer(
     need_takeout,
     max_spicy_level,
     prefer_fast,
+    meal_time,
     use_review_analysis,
     review_weight,
 ):
@@ -1103,6 +1130,7 @@ def render_restaurant_model_explainer(
             need_takeout,
             max_spicy_level,
             prefer_fast,
+            meal_time,
         )
 
         rows = [
@@ -1936,9 +1964,39 @@ if mode == "我要外食":
     category_list = ["不限"] + sorted(df["category"].unique().tolist())
     category = st.sidebar.selectbox("餐點類型", category_list)
     mood = st.sidebar.selectbox("目前心情", ["省錢", "疲累", "開心", "心情不好", "選擇困難"])
+    detected_meal_time = detect_meal_time()
 
     with st.sidebar.expander("進階條件", expanded=False):
-        weather = st.selectbox("目前天氣", ["普通", "熱", "冷", "雨天"])
+        meal_time_mode = st.radio("用餐時段來源", ["自動判斷", "手動選擇"], horizontal=True)
+        if meal_time_mode == "自動判斷":
+            meal_time = detected_meal_time
+            st.success(f"自動判斷：{meal_time}")
+        else:
+            meal_time = st.selectbox("用餐時段", ["不套用", "早餐", "午餐", "下午茶", "晚餐", "宵夜"], index=3)
+        weather_mode = st.radio("天氣來源", ["自動偵測", "手動選擇"], horizontal=True)
+        if weather_mode == "自動偵測":
+            weather_location = st.text_input("所在地區", value="Taichung", help="可輸入 Taichung、Taipei、Feng Chia University 等地點。")
+            weather_info = get_cached_weather(weather_location)
+            weather = weather_info["weather"]
+            if weather_info["ok"]:
+                temp_text = "--" if weather_info["temperature_c"] is None else f"{weather_info['temperature_c']:.0f}°C"
+                st.success(
+                    f"自動判斷：{weather}｜{weather_info['location']}｜{temp_text}｜{weather_info['description']}"
+                )
+            else:
+                st.warning("天氣自動偵測失敗，已暫時使用普通天氣。可改用手動選擇。")
+                st.caption(f"來源：{weather_info['source']}｜錯誤：{weather_info['error']}")
+        else:
+            weather_info = {
+                "ok": False,
+                "location": "手動選擇",
+                "weather": "普通",
+                "temperature_c": None,
+                "description": "",
+                "source": "manual",
+                "error": "",
+            }
+            weather = st.selectbox("目前天氣", ["普通", "熱", "冷", "雨天"])
         need_takeout = st.selectbox("是否需要外帶", ["不限", "yes", "no"])
         max_spicy_level = st.slider("可接受辣度", 0, 5, 2)
         prefer_fast = st.checkbox("希望快速出餐")
@@ -1965,6 +2023,7 @@ if mode == "我要外食":
         len(df),
         sort_by,
         min_rating,
+        meal_time,
     )
     evaluation_baseline = merge_review_analysis(candidate_result, review_analysis)
     evaluation_baseline["final_score"] = evaluation_baseline["score"]
@@ -1990,6 +2049,14 @@ if mode == "我要外食":
             st.session_state.restaurant_decision = None
 
     st.info(f"目前情緒策略：{get_mood_strategy(mood)}")
+    if weather_mode == "自動偵測":
+        st.caption(
+            f"自動天氣：{weather}｜地點：{weather_info['location']}｜來源：{weather_info['source']}"
+        )
+    if meal_time_mode == "自動判斷":
+        st.caption(f"自動時段：{meal_time}｜{get_meal_time_strategy(meal_time)}")
+    elif meal_time != "不套用":
+        st.caption(f"手動時段：{meal_time}｜{get_meal_time_strategy(meal_time)}")
     st.caption(
         f"排序方式：{sort_by}｜最低評分：{min_rating:.1f}｜顯示 {top_n} 筆｜"
         f"評論分析：{'啟用' if use_review_analysis else '未啟用'}"
@@ -2033,6 +2100,7 @@ if mode == "我要外食":
         need_takeout,
         max_spicy_level,
         prefer_fast,
+        meal_time,
         use_review_analysis,
         review_weight,
     )
