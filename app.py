@@ -467,6 +467,75 @@ def inject_design_system():
             margin-bottom: 1rem;
         }
 
+        .demo-flow {
+            border: 1px solid #cfe2d9;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #f4fbf7 0%, #ffffff 62%);
+            padding: 1rem;
+            margin: 0.75rem 0 1rem;
+        }
+
+        .demo-flow__header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: flex-start;
+            margin-bottom: 0.8rem;
+        }
+
+        .demo-flow__title {
+            color: var(--ink);
+            font-weight: 900;
+            font-size: 1.05rem;
+        }
+
+        .demo-flow__case {
+            color: var(--green);
+            font-size: 0.86rem;
+            font-weight: 900;
+            text-align: right;
+        }
+
+        .demo-steps {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0.6rem;
+        }
+
+        .demo-step {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.78);
+            padding: 0.78rem;
+        }
+
+        .demo-step__number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.65rem;
+            height: 1.65rem;
+            border-radius: 8px;
+            background: var(--green);
+            color: #ffffff;
+            font-size: 0.78rem;
+            font-weight: 900;
+            margin-bottom: 0.48rem;
+        }
+
+        .demo-step__title {
+            color: var(--ink);
+            font-size: 0.88rem;
+            font-weight: 900;
+            margin-bottom: 0.25rem;
+        }
+
+        .demo-step__text {
+            color: var(--muted);
+            font-size: 0.78rem;
+            line-height: 1.5;
+        }
+
         .decision-grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -742,8 +811,16 @@ def inject_design_system():
             }
             .dashboard-grid,
             .explain-grid,
-            .decision-grid {
+            .decision-grid,
+            .demo-steps {
                 grid-template-columns: 1fr;
+            }
+            .demo-flow__header {
+                display: block;
+            }
+            .demo-flow__case {
+                text-align: left;
+                margin-top: 0.4rem;
             }
         }
         </style>
@@ -803,9 +880,51 @@ def render_anchor(anchor_id):
     st.markdown(f'<div id="{html.escape(anchor_id)}" class="section-anchor"></div>', unsafe_allow_html=True)
 
 
+def render_demo_flow(current_mode, case_name, case_description):
+    if current_mode == "我要外食":
+        steps = [
+            ("選情境", "用展示案例快速套用預算、距離、心情與評論門檻。"),
+            ("看結論", "先看本次最佳建議、適合族群與關鍵取捨。"),
+            ("驗模型", "展開模型評估，觀察評論分析前後排名差異。"),
+            ("做回饋", "對餐廳按喜歡或不喜歡，展示偏好學習。"),
+            ("看地圖", "用互動式圖針呈現空間位置與 CP 值。"),
+        ]
+    else:
+        steps = [
+            ("選情境", "用展示案例套用冰箱食材、料理時間與熱量限制。"),
+            ("看結論", "先看本次最佳食譜、適合族群與第二名比較。"),
+            ("看食材", "檢查保存優先級，說明如何減少食材浪費。"),
+            ("做回饋", "對食譜按喜歡或不喜歡，展示偏好學習。"),
+            ("看購物", "查看缺少食材清單，說明內食決策如何落地。"),
+        ]
+
+    step_html = "".join(
+        "<div class='demo-step'>"
+        f"<div class='demo-step__number'>{index:02d}</div>"
+        f"<div class='demo-step__title'>{html.escape(title)}</div>"
+        f"<div class='demo-step__text'>{html.escape(text)}</div>"
+        "</div>"
+        for index, (title, text) in enumerate(steps, start=1)
+    )
+    st.markdown(
+        "<section class='demo-flow'>"
+        "<div class='demo-flow__header'>"
+        "<div>"
+        "<div class='demo-flow__title'>專題展示流程</div>"
+        "<div class='demo-step__text'>照這個順序展示，老師能快速看到系統的資料處理、推薦模型、可解釋性與互動回饋。</div>"
+        "</div>"
+        f"<div class='demo-flow__case'>目前案例：{html.escape(case_name)}<br>{html.escape(case_description)}</div>"
+        "</div>"
+        f"<div class='demo-steps'>{step_html}</div>"
+        "</section>",
+        unsafe_allow_html=True,
+    )
+
+
 def get_nav_items(current_mode):
     if current_mode == "我要外食":
         return [
+            ("展示流程", "demo"),
             ("推薦概覽", "overview"),
             ("決策儀表板", "dashboard"),
             ("模型評估", "evaluation"),
@@ -817,6 +936,7 @@ def get_nav_items(current_mode):
             ("資料表", "data"),
         ]
     return [
+        ("展示流程", "demo"),
         ("推薦概覽", "overview"),
         ("決策儀表板", "dashboard"),
         ("模型評估", "evaluation"),
@@ -2066,6 +2186,95 @@ RECIPE_SMART_MODES = {
 }
 
 
+RESTAURANT_DEMO_CASES = {
+    "手動自訂": {
+        "description": "不套用展示情境，保留完整手動控制。",
+        "smart_mode": "自訂",
+        "overrides": {},
+    },
+    "大學生省錢午餐": {
+        "description": "預算有限、午餐時段、希望快速找到高 CP 值選項。",
+        "smart_mode": "省錢外食",
+        "overrides": {
+            "budget": 120,
+            "distance": 10,
+            "meal_time_mode": "手動選擇",
+            "manual_meal_time": "午餐",
+            "sort_by": "CP值優先",
+            "min_rating": 3.5,
+            "max_negative_ratio": 50,
+        },
+    },
+    "上班族快速外帶": {
+        "description": "時間少、需要外帶、優先近距離和快速出餐。",
+        "smart_mode": "快速午餐",
+        "overrides": {
+            "budget": 160,
+            "distance": 7,
+            "need_takeout": "yes",
+            "prefer_fast": True,
+            "sort_by": "距離最近",
+            "max_negative_ratio": 40,
+            "hide_high_risk": True,
+        },
+    },
+    "老師聚餐不踩雷": {
+        "description": "展示評論分析價值，優先低負評、高評分與風險控管。",
+        "smart_mode": "不想踩雷",
+        "overrides": {
+            "budget": 240,
+            "distance": 14,
+            "sort_by": "評分最高",
+            "min_rating": 4.0,
+            "review_weight": 90,
+            "max_negative_ratio": 25,
+            "hide_high_risk": True,
+        },
+    },
+}
+
+
+RECIPE_DEMO_CASES = {
+    "手動自訂": {
+        "description": "不套用展示情境，保留完整手動控制。",
+        "smart_mode": "自訂",
+        "custom_ingredients": "",
+        "overrides": {},
+    },
+    "宅家不出門": {
+        "description": "只用冰箱現有食材，展示內食族不想出門的情境。",
+        "smart_mode": "我不想出門",
+        "custom_ingredients": "",
+        "overrides": {
+            "default_ingredients": ["雞蛋", "白飯", "蔥"],
+            "max_missing": 0,
+            "only_cookable": True,
+            "max_time": 25,
+        },
+    },
+    "清冰箱減浪費": {
+        "description": "展示保存優先級，讓快過期或浪費成本高的食材優先被使用。",
+        "smart_mode": "清冰箱模式",
+        "custom_ingredients": "豆腐, 高麗菜",
+        "overrides": {
+            "default_ingredients": ["雞蛋", "白飯", "蔥", "番茄"],
+            "max_time": 40,
+            "max_missing": 2,
+        },
+    },
+    "健身低熱量": {
+        "description": "展示熱量限制與食譜篩選，適合控制飲食的使用者。",
+        "smart_mode": "低熱量",
+        "custom_ingredients": "雞胸肉, 青菜",
+        "overrides": {
+            "default_ingredients": ["雞蛋", "番茄", "豆腐"],
+            "max_calories": 450,
+            "max_time": 30,
+        },
+    },
+}
+
+
 def index_of(options, value, fallback=0):
     try:
         return options.index(value)
@@ -2705,8 +2914,20 @@ if mode == "我要外食":
     st.sidebar.header("外食條件")
     st.sidebar.caption("先選使用情境，系統會自動帶入常用條件；需要更細再展開進階條件。")
 
-    smart_mode = st.sidebar.selectbox("智慧模式", list(RESTAURANT_SMART_MODES.keys()))
-    restaurant_profile = RESTAURANT_SMART_MODES[smart_mode]
+    restaurant_demo_case = st.sidebar.selectbox("展示案例", list(RESTAURANT_DEMO_CASES.keys()))
+    restaurant_demo = RESTAURANT_DEMO_CASES[restaurant_demo_case]
+    smart_mode_options = list(RESTAURANT_SMART_MODES.keys())
+    smart_mode = st.sidebar.selectbox(
+        "智慧模式",
+        smart_mode_options,
+        index=index_of(smart_mode_options, restaurant_demo["smart_mode"]),
+        key=f"restaurant_smart_mode_{restaurant_demo_case}",
+    )
+    restaurant_profile = {
+        **RESTAURANT_SMART_MODES[smart_mode],
+        **restaurant_demo.get("overrides", {}),
+    }
+    restaurant_context_key = f"{restaurant_demo_case}_{smart_mode}"
     st.sidebar.info(restaurant_profile["description"])
 
     budget = st.sidebar.slider(
@@ -2715,28 +2936,28 @@ if mode == "我要外食":
         300,
         int(restaurant_profile["budget"]),
         step=5,
-        key=f"restaurant_budget_{smart_mode}",
+        key=f"restaurant_budget_{restaurant_context_key}",
     )
     max_distance = st.sidebar.slider(
         "可接受距離（分鐘）",
         1,
         20,
         int(restaurant_profile["distance"]),
-        key=f"restaurant_distance_{smart_mode}",
+        key=f"restaurant_distance_{restaurant_context_key}",
     )
     category_list = ["不限"] + sorted(df["category"].unique().tolist())
     category = st.sidebar.selectbox(
         "餐點類型",
         category_list,
         index=index_of(category_list, restaurant_profile["category"]),
-        key=f"restaurant_category_{smart_mode}",
+        key=f"restaurant_category_{restaurant_context_key}",
     )
     mood_options = ["省錢", "疲累", "開心", "心情不好", "選擇困難"]
     mood = st.sidebar.selectbox(
         "目前心情",
         mood_options,
         index=index_of(mood_options, restaurant_profile["mood"]),
-        key=f"restaurant_mood_{smart_mode}",
+        key=f"restaurant_mood_{restaurant_context_key}",
     )
     detected_meal_time = detect_meal_time()
 
@@ -2747,7 +2968,7 @@ if mode == "我要外食":
             meal_time_mode_options,
             horizontal=True,
             index=index_of(meal_time_mode_options, restaurant_profile["meal_time_mode"]),
-            key=f"restaurant_meal_time_mode_{smart_mode}",
+            key=f"restaurant_meal_time_mode_{restaurant_context_key}",
         )
         if meal_time_mode == "自動判斷":
             meal_time = detected_meal_time
@@ -2758,7 +2979,7 @@ if mode == "我要外食":
                 "用餐時段",
                 meal_time_options,
                 index=index_of(meal_time_options, restaurant_profile["manual_meal_time"], fallback=3),
-                key=f"restaurant_meal_time_{smart_mode}",
+                key=f"restaurant_meal_time_{restaurant_context_key}",
             )
         weather_mode_options = ["自動偵測", "手動選擇"]
         weather_mode = st.radio(
@@ -2766,14 +2987,14 @@ if mode == "我要外食":
             weather_mode_options,
             horizontal=True,
             index=index_of(weather_mode_options, restaurant_profile["weather_mode"]),
-            key=f"restaurant_weather_mode_{smart_mode}",
+            key=f"restaurant_weather_mode_{restaurant_context_key}",
         )
         if weather_mode == "自動偵測":
             weather_location = st.text_input(
                 "所在地區",
                 value="Xitun District, Taichung, Taiwan",
                 help="建議輸入行政區，例如 Xitun District, Taichung, Taiwan，避免天氣服務解析到錯誤區域。",
-                key=f"restaurant_weather_location_{smart_mode}",
+                key=f"restaurant_weather_location_{restaurant_context_key}",
             )
             weather_info = get_cached_weather(weather_location)
             weather = weather_info["weather"]
@@ -2803,26 +3024,26 @@ if mode == "我要外食":
             "是否需要外帶",
             takeout_options,
             index=index_of(takeout_options, restaurant_profile["need_takeout"]),
-            key=f"restaurant_takeout_{smart_mode}",
+            key=f"restaurant_takeout_{restaurant_context_key}",
         )
         max_spicy_level = st.slider(
             "可接受辣度",
             0,
             5,
             int(restaurant_profile["max_spicy_level"]),
-            key=f"restaurant_spicy_{smart_mode}",
+            key=f"restaurant_spicy_{restaurant_context_key}",
         )
         prefer_fast = st.checkbox(
             "希望快速出餐",
             value=bool(restaurant_profile["prefer_fast"]),
-            key=f"restaurant_fast_{smart_mode}",
+            key=f"restaurant_fast_{restaurant_context_key}",
         )
         sort_options = ["綜合推薦", "CP值優先", "距離最近", "評分最高"]
         sort_by = st.selectbox(
             "排序方式",
             sort_options,
             index=index_of(sort_options, restaurant_profile["sort_by"]),
-            key=f"restaurant_sort_{smart_mode}",
+            key=f"restaurant_sort_{restaurant_context_key}",
         )
         min_rating = st.slider(
             "最低評分",
@@ -2830,21 +3051,21 @@ if mode == "我要外食":
             5.0,
             float(restaurant_profile["min_rating"]),
             step=0.1,
-            key=f"restaurant_rating_{smart_mode}",
+            key=f"restaurant_rating_{restaurant_context_key}",
         )
         top_n = st.slider(
             "顯示推薦筆數",
             3,
             10,
             int(restaurant_profile["top_n"]),
-            key=f"restaurant_top_n_{smart_mode}",
+            key=f"restaurant_top_n_{restaurant_context_key}",
         )
 
     with st.sidebar.expander("評論分析", expanded=False):
         use_review_analysis = st.checkbox(
             "納入評論文字分析",
             value=bool(restaurant_profile["use_review_analysis"]),
-            key=f"restaurant_review_enabled_{smart_mode}",
+            key=f"restaurant_review_enabled_{restaurant_context_key}",
         )
         review_weight = st.slider(
             "評論影響權重",
@@ -2852,7 +3073,7 @@ if mode == "我要外食":
             100,
             int(restaurant_profile["review_weight"]),
             step=10,
-            key=f"restaurant_review_weight_{smart_mode}",
+            key=f"restaurant_review_weight_{restaurant_context_key}",
         )
         max_negative_ratio = st.slider(
             "可接受負評比例",
@@ -2860,12 +3081,12 @@ if mode == "我要外食":
             100,
             int(restaurant_profile["max_negative_ratio"]),
             step=5,
-            key=f"restaurant_negative_{smart_mode}",
+            key=f"restaurant_negative_{restaurant_context_key}",
         )
         hide_high_risk = st.checkbox(
             "隱藏高風險評論餐廳",
             value=bool(restaurant_profile["hide_high_risk"]),
-            key=f"restaurant_hide_risk_{smart_mode}",
+            key=f"restaurant_hide_risk_{restaurant_context_key}",
         )
 
     with st.sidebar.expander("定位與距離", expanded=True):
@@ -2920,6 +3141,9 @@ if mode == "我要外食":
             result = result[result["review_risk"] != "高"]
     result = apply_review_adjustment(result, use_review_analysis, review_weight)
     result = apply_restaurant_preference_learning(result, preference_source).head(top_n)
+
+    render_anchor("demo")
+    render_demo_flow(mode, restaurant_demo_case, restaurant_demo["description"])
 
     render_anchor("overview")
     render_section_kicker("外食決策")
@@ -3046,8 +3270,20 @@ else:
 
     st.sidebar.header("內食條件")
     st.sidebar.caption("先選料理情境，再輸入冰箱食材；系統會把可料理性與食材保存優先級一起納入推薦。")
-    recipe_smart_mode = st.sidebar.selectbox("內食智慧模式", list(RECIPE_SMART_MODES.keys()))
-    recipe_profile = RECIPE_SMART_MODES[recipe_smart_mode]
+    recipe_demo_case = st.sidebar.selectbox("展示案例", list(RECIPE_DEMO_CASES.keys()))
+    recipe_demo = RECIPE_DEMO_CASES[recipe_demo_case]
+    recipe_smart_options = list(RECIPE_SMART_MODES.keys())
+    recipe_smart_mode = st.sidebar.selectbox(
+        "內食智慧模式",
+        recipe_smart_options,
+        index=index_of(recipe_smart_options, recipe_demo["smart_mode"]),
+        key=f"recipe_smart_mode_{recipe_demo_case}",
+    )
+    recipe_profile = {
+        **RECIPE_SMART_MODES[recipe_smart_mode],
+        **recipe_demo.get("overrides", {}),
+    }
+    recipe_context_key = f"{recipe_demo_case}_{recipe_smart_mode}"
     st.sidebar.info(recipe_profile["description"])
 
     ingredient_options = collect_ingredient_options(recipes)
@@ -3059,13 +3295,13 @@ else:
         "冰箱常見食材",
         ingredient_options,
         default=default_ingredients,
-        key=f"recipe_ingredients_{recipe_smart_mode}",
+        key=f"recipe_ingredients_{recipe_context_key}",
     )
     custom_ingredients = st.sidebar.text_area(
         "其他食材",
-        value="",
+        value=recipe_demo.get("custom_ingredients", ""),
         help="可用逗號、頓號或空白分隔，例如：豆腐, 番茄",
-        key=f"recipe_custom_ingredients_{recipe_smart_mode}",
+        key=f"recipe_custom_ingredients_{recipe_context_key}",
     )
     ingredient_text = ",".join(selected_ingredients + [custom_ingredients])
     current_ingredients = sorted(parse_ingredients(ingredient_text))
@@ -3078,14 +3314,14 @@ else:
             60,
             int(recipe_profile["max_time"]),
             step=5,
-            key=f"recipe_time_{recipe_smart_mode}",
+            key=f"recipe_time_{recipe_context_key}",
         )
         difficulty_options = ["不限", "簡單", "中等", "困難"]
         difficulty_preference = st.selectbox(
             "料理難度",
             difficulty_options,
             index=index_of(difficulty_options, recipe_profile["difficulty"]),
-            key=f"recipe_difficulty_{recipe_smart_mode}",
+            key=f"recipe_difficulty_{recipe_context_key}",
         )
         max_calories = st.slider(
             "熱量上限（kcal）",
@@ -3093,26 +3329,26 @@ else:
             900,
             int(recipe_profile["max_calories"]),
             step=50,
-            key=f"recipe_calories_{recipe_smart_mode}",
+            key=f"recipe_calories_{recipe_context_key}",
         )
         max_missing = st.slider(
             "最多可缺少食材數",
             0,
             5,
             int(recipe_profile["max_missing"]),
-            key=f"recipe_missing_{recipe_smart_mode}",
+            key=f"recipe_missing_{recipe_context_key}",
         )
         only_cookable = st.checkbox(
             "只顯示現有食材足夠的食譜",
             value=bool(recipe_profile["only_cookable"]),
-            key=f"recipe_only_cookable_{recipe_smart_mode}",
+            key=f"recipe_only_cookable_{recipe_context_key}",
         )
         top_n = st.slider(
             "顯示推薦筆數",
             3,
             10,
             int(recipe_profile["top_n"]),
-            key=f"recipe_top_n_{recipe_smart_mode}",
+            key=f"recipe_top_n_{recipe_context_key}",
         )
 
     candidate_result = recommend_recipes(
@@ -3134,6 +3370,9 @@ else:
         current_recipe_names = set(result["name"].tolist())
         if st.session_state.recipe_decision["name"] not in current_recipe_names:
             st.session_state.recipe_decision = None
+
+    render_anchor("demo")
+    render_demo_flow(mode, recipe_demo_case, recipe_demo["description"])
 
     render_anchor("overview")
     render_section_kicker("內食決策")
