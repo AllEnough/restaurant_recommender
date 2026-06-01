@@ -1118,7 +1118,7 @@ def render_review_analysis_panel(result):
         return
 
     review_data = result[result["review_count"] > 0]
-    with st.expander("餐廳評論文字分析", expanded=True):
+    with st.expander("餐廳評論文字分析", expanded=False):
         if review_data.empty:
             st.info("目前推薦結果沒有可分析的評論資料。")
             return
@@ -1186,7 +1186,7 @@ def render_restaurant_model_explainer(
     if result.empty:
         return
 
-    with st.expander("推薦模型解釋器", expanded=True):
+    with st.expander("推薦模型解釋器", expanded=False):
         names = result["name"].tolist()
         selected_name = st.selectbox("選擇要解釋的餐廳", names, key="restaurant_model_explainer")
         selected = result[result["name"] == selected_name].iloc[0]
@@ -1664,11 +1664,225 @@ def render_shopping_list(result):
             st.success(f"{selected_name} 目前不需要補買食材。")
 
 
+RESTAURANT_SMART_MODES = {
+    "自訂": {
+        "description": "保留完整控制權，適合想自行調整每個條件。",
+        "budget": 150,
+        "distance": 10,
+        "category": "不限",
+        "mood": "省錢",
+        "meal_time_mode": "自動判斷",
+        "manual_meal_time": "午餐",
+        "weather_mode": "自動偵測",
+        "need_takeout": "不限",
+        "max_spicy_level": 2,
+        "prefer_fast": False,
+        "sort_by": "綜合推薦",
+        "min_rating": 0.0,
+        "top_n": 5,
+        "use_review_analysis": True,
+        "review_weight": 60,
+        "max_negative_ratio": 60,
+        "hide_high_risk": False,
+    },
+    "快速午餐": {
+        "description": "適合中午時間有限，優先找近、快、可外帶且不要太踩雷的選項。",
+        "budget": 150,
+        "distance": 8,
+        "category": "不限",
+        "mood": "疲累",
+        "meal_time_mode": "手動選擇",
+        "manual_meal_time": "午餐",
+        "weather_mode": "自動偵測",
+        "need_takeout": "yes",
+        "max_spicy_level": 2,
+        "prefer_fast": True,
+        "sort_by": "距離最近",
+        "min_rating": 3.8,
+        "top_n": 5,
+        "use_review_analysis": True,
+        "review_weight": 70,
+        "max_negative_ratio": 35,
+        "hide_high_risk": True,
+    },
+    "省錢外食": {
+        "description": "適合月底或學生族群，優先提高 CP 值與價格友善度。",
+        "budget": 120,
+        "distance": 10,
+        "category": "不限",
+        "mood": "省錢",
+        "meal_time_mode": "自動判斷",
+        "manual_meal_time": "午餐",
+        "weather_mode": "自動偵測",
+        "need_takeout": "不限",
+        "max_spicy_level": 2,
+        "prefer_fast": False,
+        "sort_by": "CP值優先",
+        "min_rating": 3.5,
+        "top_n": 5,
+        "use_review_analysis": True,
+        "review_weight": 50,
+        "max_negative_ratio": 50,
+        "hide_high_risk": False,
+    },
+    "不想踩雷": {
+        "description": "適合聚餐、約會或帶老師吃飯，優先避開負評比例高的餐廳。",
+        "budget": 220,
+        "distance": 12,
+        "category": "不限",
+        "mood": "選擇困難",
+        "meal_time_mode": "自動判斷",
+        "manual_meal_time": "晚餐",
+        "weather_mode": "自動偵測",
+        "need_takeout": "不限",
+        "max_spicy_level": 2,
+        "prefer_fast": False,
+        "sort_by": "評分最高",
+        "min_rating": 4.0,
+        "top_n": 5,
+        "use_review_analysis": True,
+        "review_weight": 80,
+        "max_negative_ratio": 25,
+        "hide_high_risk": True,
+    },
+    "疲累近距離": {
+        "description": "適合下課或下班後不想走太遠，優先近距離與快速出餐。",
+        "budget": 160,
+        "distance": 6,
+        "category": "不限",
+        "mood": "疲累",
+        "meal_time_mode": "自動判斷",
+        "manual_meal_time": "晚餐",
+        "weather_mode": "自動偵測",
+        "need_takeout": "yes",
+        "max_spicy_level": 1,
+        "prefer_fast": True,
+        "sort_by": "距離最近",
+        "min_rating": 3.7,
+        "top_n": 5,
+        "use_review_analysis": True,
+        "review_weight": 60,
+        "max_negative_ratio": 45,
+        "hide_high_risk": True,
+    },
+}
+
+
+RECIPE_SMART_MODES = {
+    "自訂": {
+        "description": "保留完整控制權，適合想自己決定時間、熱量與缺少食材數。",
+        "default_ingredients": ["雞蛋", "白飯", "蔥"],
+        "max_time": 20,
+        "difficulty": "不限",
+        "max_calories": 650,
+        "max_missing": 2,
+        "only_cookable": False,
+        "top_n": 5,
+    },
+    "我不想出門": {
+        "description": "優先推薦冰箱現有食材就能完成的食譜，降低外出採買需求。",
+        "default_ingredients": ["雞蛋", "白飯", "蔥"],
+        "max_time": 25,
+        "difficulty": "不限",
+        "max_calories": 700,
+        "max_missing": 0,
+        "only_cookable": True,
+        "top_n": 5,
+    },
+    "清冰箱模式": {
+        "description": "優先使用保存天數較短、應該先消耗的食材，讓系統幫你減少浪費。",
+        "default_ingredients": ["雞蛋", "白飯", "蔥", "番茄"],
+        "max_time": 40,
+        "difficulty": "不限",
+        "max_calories": 750,
+        "max_missing": 2,
+        "only_cookable": False,
+        "top_n": 5,
+    },
+    "快速料理": {
+        "description": "適合剛下課、剛下班或懶得煮太久，優先推薦短時間料理。",
+        "default_ingredients": ["雞蛋", "白飯", "蔥"],
+        "max_time": 15,
+        "difficulty": "簡單",
+        "max_calories": 650,
+        "max_missing": 2,
+        "only_cookable": False,
+        "top_n": 5,
+    },
+    "低熱量": {
+        "description": "適合想控制熱量的使用者，優先保留較輕盈的食譜選項。",
+        "default_ingredients": ["雞蛋", "番茄", "豆腐"],
+        "max_time": 30,
+        "difficulty": "不限",
+        "max_calories": 450,
+        "max_missing": 2,
+        "only_cookable": False,
+        "top_n": 5,
+    },
+}
+
+
+def index_of(options, value, fallback=0):
+    try:
+        return options.index(value)
+    except ValueError:
+        return fallback
+
+
+def render_restaurant_decision_summary(result, smart_mode, weather, meal_time, use_review_analysis):
+    if result.empty:
+        return
+
+    final_column = "final_score" if "final_score" in result.columns else "score"
+    best = result.sort_values(by=[final_column], ascending=False).iloc[0]
+    review_risk = best.get("review_risk", "未知")
+    negative_ratio = best.get("negative_ratio", 0)
+    review_text = (
+        f"評論風險 {review_risk}、負評比例 {negative_ratio}%"
+        if use_review_analysis
+        else "尚未納入評論風險"
+    )
+    takeout_text = "可外帶" if best.get("takeout") == "yes" else "以內用為主"
+    st.markdown(
+        "<div class='insight-panel decision-hero'>"
+        "<div class='insight-panel__title'>本次最佳建議</div>"
+        f"<div class='insight-panel__body'><b>{html.escape(str(best['name']))}</b> "
+        f"適合「{html.escape(str(smart_mode))}」情境。"
+        f"約 {best['price']} 元、距離 {best['distance']} 分鐘、評分 {best['rating']}，"
+        f"{html.escape(review_text)}，{takeout_text}。"
+        f"目前時段為 {html.escape(str(meal_time))}、天氣為 {html.escape(str(weather))}，"
+        f"系統建議先從這間開始考慮。</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_recipe_decision_summary(result, smart_mode, current_ingredients):
+    if result.empty:
+        return
+
+    score_column = "final_score" if "final_score" in result.columns else "score"
+    best = result.sort_values(by=[score_column], ascending=False).iloc[0]
+    ingredient_text = "、".join(current_ingredients) or "尚未輸入"
+    missing_text = best.get("missing_ingredients", "") or "無"
+    st.markdown(
+        "<div class='insight-panel decision-hero'>"
+        "<div class='insight-panel__title'>本次最佳建議</div>"
+        f"<div class='insight-panel__body'><b>{html.escape(str(best['name']))}</b> "
+        f"適合「{html.escape(str(smart_mode))}」情境。"
+        f"料理時間約 {best['time']} 分鐘、熱量 {best['calories']} kcal、難度 {html.escape(str(best['difficulty']))}。"
+        f"目前食材：{html.escape(ingredient_text)}；缺少食材：{html.escape(str(missing_text))}。"
+        "系統會把食材符合度與保存優先級一起納入排序。</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def render_restaurant_decision_dashboard(result, all_restaurants, review_analysis, use_review_analysis):
     full_review_data = merge_review_analysis(all_restaurants, review_analysis)
     review_ready = not full_review_data.empty and full_review_data["review_count"].sum() > 0
 
-    with st.expander("外食決策分析 Dashboard", expanded=True):
+    with st.expander("外食決策分析 Dashboard", expanded=False):
         if result.empty:
             st.info("目前沒有推薦結果可分析，放寬條件後會顯示決策儀表板。")
             return
@@ -1761,7 +1975,7 @@ def render_restaurant_decision_dashboard(result, all_restaurants, review_analysi
 
 
 def render_recipe_decision_dashboard(result, all_recipes, current_ingredients, priority_profiles):
-    with st.expander("內食決策分析 Dashboard", expanded=True):
+    with st.expander("內食決策分析 Dashboard", expanded=False):
         if result.empty:
             st.info("目前沒有推薦結果可分析，放寬條件或增加食材後會顯示決策儀表板。")
             return
@@ -1866,7 +2080,7 @@ def calculate_top_overlap(left_names, right_names):
 
 
 def render_restaurant_model_evaluation(baseline_result, enhanced_result, top_n, use_review_analysis):
-    with st.expander("外食模型評估：評論分析前後比較", expanded=True):
+    with st.expander("外食模型評估：評論分析前後比較", expanded=False):
         if baseline_result.empty or enhanced_result.empty:
             st.info("目前資料不足，無法進行模型評估。")
             return
@@ -1930,7 +2144,7 @@ def render_restaurant_model_evaluation(baseline_result, enhanced_result, top_n, 
 
 
 def render_recipe_model_evaluation(baseline_result, enhanced_result, top_n, priority_profiles):
-    with st.expander("內食模型評估：保存優先級前後比較", expanded=True):
+    with st.expander("內食模型評估：保存優先級前後比較", expanded=False):
         if baseline_result.empty or enhanced_result.empty:
             st.info("目前資料不足，無法進行模型評估。")
             return
@@ -2039,28 +2253,77 @@ if mode == "我要外食":
     review_analysis = analyze_reviews(load_reviews("reviews.csv"))
 
     st.sidebar.header("外食條件")
-    st.sidebar.caption("先設定最常用的條件，需要更細再展開進階條件。")
+    st.sidebar.caption("先選使用情境，系統會自動帶入常用條件；需要更細再展開進階條件。")
 
-    budget = st.sidebar.slider("預算上限", 50, 300, 150, step=5)
-    max_distance = st.sidebar.slider("可接受距離（分鐘）", 1, 20, 10)
+    smart_mode = st.sidebar.selectbox("智慧模式", list(RESTAURANT_SMART_MODES.keys()))
+    restaurant_profile = RESTAURANT_SMART_MODES[smart_mode]
+    st.sidebar.info(restaurant_profile["description"])
+
+    budget = st.sidebar.slider(
+        "預算上限",
+        50,
+        300,
+        int(restaurant_profile["budget"]),
+        step=5,
+        key=f"restaurant_budget_{smart_mode}",
+    )
+    max_distance = st.sidebar.slider(
+        "可接受距離（分鐘）",
+        1,
+        20,
+        int(restaurant_profile["distance"]),
+        key=f"restaurant_distance_{smart_mode}",
+    )
     category_list = ["不限"] + sorted(df["category"].unique().tolist())
-    category = st.sidebar.selectbox("餐點類型", category_list)
-    mood = st.sidebar.selectbox("目前心情", ["省錢", "疲累", "開心", "心情不好", "選擇困難"])
+    category = st.sidebar.selectbox(
+        "餐點類型",
+        category_list,
+        index=index_of(category_list, restaurant_profile["category"]),
+        key=f"restaurant_category_{smart_mode}",
+    )
+    mood_options = ["省錢", "疲累", "開心", "心情不好", "選擇困難"]
+    mood = st.sidebar.selectbox(
+        "目前心情",
+        mood_options,
+        index=index_of(mood_options, restaurant_profile["mood"]),
+        key=f"restaurant_mood_{smart_mode}",
+    )
     detected_meal_time = detect_meal_time()
 
     with st.sidebar.expander("進階條件", expanded=False):
-        meal_time_mode = st.radio("用餐時段來源", ["自動判斷", "手動選擇"], horizontal=True)
+        meal_time_mode_options = ["自動判斷", "手動選擇"]
+        meal_time_mode = st.radio(
+            "用餐時段來源",
+            meal_time_mode_options,
+            horizontal=True,
+            index=index_of(meal_time_mode_options, restaurant_profile["meal_time_mode"]),
+            key=f"restaurant_meal_time_mode_{smart_mode}",
+        )
         if meal_time_mode == "自動判斷":
             meal_time = detected_meal_time
             st.success(f"自動判斷：{meal_time}")
         else:
-            meal_time = st.selectbox("用餐時段", ["不套用", "早餐", "午餐", "下午茶", "晚餐", "宵夜"], index=3)
-        weather_mode = st.radio("天氣來源", ["自動偵測", "手動選擇"], horizontal=True)
+            meal_time_options = ["不套用", "早餐", "午餐", "下午茶", "晚餐", "宵夜"]
+            meal_time = st.selectbox(
+                "用餐時段",
+                meal_time_options,
+                index=index_of(meal_time_options, restaurant_profile["manual_meal_time"], fallback=3),
+                key=f"restaurant_meal_time_{smart_mode}",
+            )
+        weather_mode_options = ["自動偵測", "手動選擇"]
+        weather_mode = st.radio(
+            "天氣來源",
+            weather_mode_options,
+            horizontal=True,
+            index=index_of(weather_mode_options, restaurant_profile["weather_mode"]),
+            key=f"restaurant_weather_mode_{smart_mode}",
+        )
         if weather_mode == "自動偵測":
             weather_location = st.text_input(
                 "所在地區",
                 value="Xitun District, Taichung, Taiwan",
                 help="建議輸入行政區，例如 Xitun District, Taichung, Taiwan，避免天氣服務解析到錯誤區域。",
+                key=f"restaurant_weather_location_{smart_mode}",
             )
             weather_info = get_cached_weather(weather_location)
             weather = weather_info["weather"]
@@ -2085,18 +2348,75 @@ if mode == "我要外食":
                 "error": "",
             }
             weather = st.selectbox("目前天氣", ["普通", "熱", "冷", "雨天"])
-        need_takeout = st.selectbox("是否需要外帶", ["不限", "yes", "no"])
-        max_spicy_level = st.slider("可接受辣度", 0, 5, 2)
-        prefer_fast = st.checkbox("希望快速出餐")
-        sort_by = st.selectbox("排序方式", ["綜合推薦", "CP值優先", "距離最近", "評分最高"])
-        min_rating = st.slider("最低評分", 0.0, 5.0, 0.0, step=0.1)
-        top_n = st.slider("顯示推薦筆數", 3, 10, 5)
+        takeout_options = ["不限", "yes", "no"]
+        need_takeout = st.selectbox(
+            "是否需要外帶",
+            takeout_options,
+            index=index_of(takeout_options, restaurant_profile["need_takeout"]),
+            key=f"restaurant_takeout_{smart_mode}",
+        )
+        max_spicy_level = st.slider(
+            "可接受辣度",
+            0,
+            5,
+            int(restaurant_profile["max_spicy_level"]),
+            key=f"restaurant_spicy_{smart_mode}",
+        )
+        prefer_fast = st.checkbox(
+            "希望快速出餐",
+            value=bool(restaurant_profile["prefer_fast"]),
+            key=f"restaurant_fast_{smart_mode}",
+        )
+        sort_options = ["綜合推薦", "CP值優先", "距離最近", "評分最高"]
+        sort_by = st.selectbox(
+            "排序方式",
+            sort_options,
+            index=index_of(sort_options, restaurant_profile["sort_by"]),
+            key=f"restaurant_sort_{smart_mode}",
+        )
+        min_rating = st.slider(
+            "最低評分",
+            0.0,
+            5.0,
+            float(restaurant_profile["min_rating"]),
+            step=0.1,
+            key=f"restaurant_rating_{smart_mode}",
+        )
+        top_n = st.slider(
+            "顯示推薦筆數",
+            3,
+            10,
+            int(restaurant_profile["top_n"]),
+            key=f"restaurant_top_n_{smart_mode}",
+        )
 
-    with st.sidebar.expander("評論分析", expanded=True):
-        use_review_analysis = st.checkbox("納入評論文字分析", value=True)
-        review_weight = st.slider("評論影響權重", 0, 100, 60, step=10)
-        max_negative_ratio = st.slider("可接受負評比例", 0, 100, 60, step=5)
-        hide_high_risk = st.checkbox("隱藏高風險評論餐廳")
+    with st.sidebar.expander("評論分析", expanded=False):
+        use_review_analysis = st.checkbox(
+            "納入評論文字分析",
+            value=bool(restaurant_profile["use_review_analysis"]),
+            key=f"restaurant_review_enabled_{smart_mode}",
+        )
+        review_weight = st.slider(
+            "評論影響權重",
+            0,
+            100,
+            int(restaurant_profile["review_weight"]),
+            step=10,
+            key=f"restaurant_review_weight_{smart_mode}",
+        )
+        max_negative_ratio = st.slider(
+            "可接受負評比例",
+            0,
+            100,
+            int(restaurant_profile["max_negative_ratio"]),
+            step=5,
+            key=f"restaurant_negative_{smart_mode}",
+        )
+        hide_high_risk = st.checkbox(
+            "隱藏高風險評論餐廳",
+            value=bool(restaurant_profile["hide_high_risk"]),
+            key=f"restaurant_hide_risk_{smart_mode}",
+        )
 
     with st.sidebar.expander("定位與距離", expanded=True):
         location_mode = st.radio("定位方式", ["瀏覽器定位", "手動選擇據點"], horizontal=True)
@@ -2155,6 +2475,7 @@ if mode == "我要外食":
         '<div class="soft-note">系統會綜合預算、距離、心情、天氣、評分與 CP 值，產生今天最適合的外食選項。</div>',
         unsafe_allow_html=True,
     )
+    render_restaurant_decision_summary(result, smart_mode, weather, meal_time, use_review_analysis)
 
     if st.session_state.restaurant_decision is not None:
         current_names = set(result["name"].tolist())
@@ -2261,30 +2582,75 @@ else:
     recipes = load_recipes("recipes.csv")
 
     st.sidebar.header("內食條件")
-    st.sidebar.caption("選擇冰箱食材，再用進階條件調整時間、熱量與難度。")
+    st.sidebar.caption("先選料理情境，再輸入冰箱食材；系統會把可料理性與食材保存優先級一起納入推薦。")
+    recipe_smart_mode = st.sidebar.selectbox("內食智慧模式", list(RECIPE_SMART_MODES.keys()))
+    recipe_profile = RECIPE_SMART_MODES[recipe_smart_mode]
+    st.sidebar.info(recipe_profile["description"])
 
     ingredient_options = collect_ingredient_options(recipes)
+    default_ingredients = [
+        item for item in recipe_profile["default_ingredients"]
+        if item in ingredient_options
+    ]
     selected_ingredients = st.sidebar.multiselect(
         "冰箱常見食材",
         ingredient_options,
-        default=[item for item in ["雞蛋", "白飯", "蔥"] if item in ingredient_options],
+        default=default_ingredients,
+        key=f"recipe_ingredients_{recipe_smart_mode}",
     )
     custom_ingredients = st.sidebar.text_area(
         "其他食材",
         value="",
         help="可用逗號、頓號或空白分隔，例如：豆腐, 番茄",
+        key=f"recipe_custom_ingredients_{recipe_smart_mode}",
     )
     ingredient_text = ",".join(selected_ingredients + [custom_ingredients])
     current_ingredients = sorted(parse_ingredients(ingredient_text))
     priority_profiles = render_ingredient_priority_inputs(current_ingredients)
 
     with st.sidebar.expander("進階條件", expanded=False):
-        max_time = st.slider("可接受烹飪時間（分鐘）", 5, 60, 20, step=5)
-        difficulty_preference = st.selectbox("料理難度", ["不限", "簡單", "中等", "困難"])
-        max_calories = st.slider("熱量上限（kcal）", 150, 900, 650, step=50)
-        max_missing = st.slider("最多可缺少食材數", 0, 5, 2)
-        only_cookable = st.checkbox("只顯示現有食材足夠的食譜")
-        top_n = st.slider("顯示推薦筆數", 3, 10, 5)
+        max_time = st.slider(
+            "可接受烹飪時間（分鐘）",
+            5,
+            60,
+            int(recipe_profile["max_time"]),
+            step=5,
+            key=f"recipe_time_{recipe_smart_mode}",
+        )
+        difficulty_options = ["不限", "簡單", "中等", "困難"]
+        difficulty_preference = st.selectbox(
+            "料理難度",
+            difficulty_options,
+            index=index_of(difficulty_options, recipe_profile["difficulty"]),
+            key=f"recipe_difficulty_{recipe_smart_mode}",
+        )
+        max_calories = st.slider(
+            "熱量上限（kcal）",
+            150,
+            900,
+            int(recipe_profile["max_calories"]),
+            step=50,
+            key=f"recipe_calories_{recipe_smart_mode}",
+        )
+        max_missing = st.slider(
+            "最多可缺少食材數",
+            0,
+            5,
+            int(recipe_profile["max_missing"]),
+            key=f"recipe_missing_{recipe_smart_mode}",
+        )
+        only_cookable = st.checkbox(
+            "只顯示現有食材足夠的食譜",
+            value=bool(recipe_profile["only_cookable"]),
+            key=f"recipe_only_cookable_{recipe_smart_mode}",
+        )
+        top_n = st.slider(
+            "顯示推薦筆數",
+            3,
+            10,
+            int(recipe_profile["top_n"]),
+            key=f"recipe_top_n_{recipe_smart_mode}",
+        )
 
     candidate_result = recommend_recipes(
         recipes,
@@ -2311,6 +2677,7 @@ else:
         '<div class="soft-note">系統會依照冰箱食材、料理時間、熱量與食材保存狀態，優先推薦更適合先做的食譜。</div>',
         unsafe_allow_html=True,
     )
+    render_recipe_decision_summary(result, recipe_smart_mode, current_ingredients)
 
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
     summary_col1.metric("本次推薦筆數", len(result))
