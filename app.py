@@ -6,71 +6,84 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-from recommender import get_mood_strategy, load_data, recommend_restaurants
+from recommender import calculate_score_breakdown, get_mood_strategy, load_data, recommend_restaurants
 from recipe_recommender import collect_ingredient_options, load_recipes, parse_ingredients, recommend_recipes
+from review_analyzer import analyze_reviews, load_reviews, merge_review_analysis
 
-st.set_page_config(page_title="今天吃什麼", layout="wide")
+st.set_page_config(page_title="智慧飲食決策系統", layout="wide")
 
 def inject_design_system():
     st.markdown(
         """
         <style>
         :root {
-            --bg: #f8fafc;
+            --bg: #f7f7f4;
             --surface: #ffffff;
-            --surface-soft: #f1f5f9;
-            --text: #0f172a;
-            --muted: #64748b;
-            --line: #e2e8f0;
-            --primary: #ef4444;
-            --primary-dark: #dc2626;
-            --accent: #0f766e;
-            --accent-soft: #ccfbf1;
-            --amber-soft: #fef3c7;
-            --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+            --surface-soft: #fbfaf6;
+            --paper: #ffffff;
+            --paper-strong: #ffffff;
+            --ink: #1f2933;
+            --muted: #687076;
+            --line: #e7e2d8;
+            --primary: #e4572e;
+            --primary-dark: #b83219;
+            --green: #276749;
+            --green-soft: #eaf6ef;
+            --red-soft: #fff1e8;
+            --yellow-soft: #fff7d6;
+            --shadow: 0 14px 34px rgba(31, 41, 51, 0.08);
+            --shadow-soft: 0 8px 18px rgba(31, 41, 51, 0.06);
         }
 
         .stApp {
-            background:
-                radial-gradient(circle at top left, rgba(239, 68, 68, 0.10), transparent 28rem),
-                linear-gradient(180deg, #fff7ed 0%, var(--bg) 18rem);
-            color: var(--text);
+            background: var(--bg);
+            color: var(--ink);
+        }
+
+        header[data-testid="stHeader"] {
+            background: rgba(247, 247, 244, 0.86);
+            border-bottom: 1px solid rgba(231, 226, 216, 0.78);
+            backdrop-filter: blur(14px);
+        }
+
+        [data-testid="stDecoration"] {
+            display: none;
         }
 
         section[data-testid="stSidebar"] {
-            background: rgba(255, 255, 255, 0.82);
-            border-right: 1px solid rgba(226, 232, 240, 0.9);
-            box-shadow: 10px 0 35px rgba(15, 23, 42, 0.05);
+            background: #f0eee8;
+            border-right: 1px solid var(--line);
+            box-shadow: none;
         }
 
         section[data-testid="stSidebar"] > div {
-            padding-top: 1.6rem;
+            padding-top: 1.3rem;
         }
 
         section[data-testid="stSidebar"] *,
         section[data-testid="stSidebar"] label,
         section[data-testid="stSidebar"] p,
         section[data-testid="stSidebar"] span {
-            color: #0f172a;
+            color: var(--ink);
         }
 
         .block-container {
-            padding-top: 2.2rem;
+            padding-top: 1rem;
             padding-bottom: 4rem;
             max-width: 1180px;
         }
 
         h1, h2, h3 {
-            color: var(--text);
+            color: var(--ink);
             letter-spacing: 0;
         }
 
         div[data-testid="stMetric"] {
-            background: rgba(255, 255, 255, 0.92);
-            border: 1px solid rgba(226, 232, 240, 0.9);
-            border-radius: 18px;
+            background: var(--paper-strong);
+            border: 1px solid var(--line);
+            border-radius: 12px;
             padding: 1rem 1.1rem;
-            box-shadow: var(--shadow);
+            box-shadow: var(--shadow-soft);
         }
 
         div[data-testid="stMetric"] label,
@@ -80,82 +93,81 @@ def inject_design_system():
         }
 
         div[data-testid="stMetricValue"] {
-            color: var(--text);
+            color: var(--ink);
             font-weight: 800;
         }
 
         div[data-testid="stVerticalBlockBorderWrapper"] {
-            border: 1px solid rgba(226, 232, 240, 0.95);
-            border-radius: 20px;
-            background: rgba(255, 255, 255, 0.94);
-            box-shadow: var(--shadow);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: var(--paper-strong);
+            box-shadow: var(--shadow-soft);
         }
 
         div[data-testid="stAlert"] {
-            border-radius: 16px;
-            border: 1px solid rgba(226, 232, 240, 0.95);
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            box-shadow: none;
         }
 
         .stButton > button {
-            border-radius: 999px;
-            border: 1px solid rgba(239, 68, 68, 0.24);
-            background: #ffffff !important;
+            border-radius: 10px;
+            border: 1px solid #f4b49b;
+            background: #fff7f2 !important;
             color: var(--primary-dark) !important;
             font-weight: 700;
-            padding: 0.45rem 1rem;
+            padding: 0.48rem 0.95rem;
             transition: all 0.15s ease;
         }
 
         .stButton > button:hover {
             border-color: var(--primary);
-            background: #fff1f2 !important;
+            background: #ffede5 !important;
             color: var(--primary-dark) !important;
-            transform: translateY(-1px);
-            box-shadow: 0 10px 22px rgba(239, 68, 68, 0.14);
+            box-shadow: 0 8px 16px rgba(228, 87, 46, 0.12);
         }
 
         button[data-testid="stBaseButton-secondary"] {
-            border-radius: 999px !important;
-            border: 1px solid rgba(239, 68, 68, 0.24) !important;
-            background: #ffffff !important;
+            border-radius: 10px !important;
+            border: 1px solid #f4b49b !important;
+            background: #fff7f2 !important;
             color: var(--primary-dark) !important;
             font-weight: 800 !important;
         }
 
         button[data-testid="stBaseButton-secondary"]:hover {
-            background: #fff1f2 !important;
+            background: #ffede5 !important;
             color: var(--primary-dark) !important;
             border-color: var(--primary) !important;
-            box-shadow: 0 10px 22px rgba(239, 68, 68, 0.14) !important;
+            box-shadow: 0 8px 16px rgba(228, 87, 46, 0.12) !important;
         }
 
         .stButton > button:disabled {
-            background: #f1f5f9 !important;
-            color: #94a3b8 !important;
-            border-color: #e2e8f0;
+            background: #eee7dd !important;
+            color: #a89c90 !important;
+            border-color: #e4d8ca;
             box-shadow: none;
         }
 
         button[data-testid="stBaseButton-secondary"]:disabled {
-            background: #f1f5f9 !important;
-            color: #94a3b8 !important;
-            border-color: #e2e8f0 !important;
+            background: #eee7dd !important;
+            color: #a89c90 !important;
+            border-color: #e4d8ca !important;
             box-shadow: none !important;
         }
 
         div[data-testid="stRadio"] {
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid rgba(226, 232, 240, 0.95);
-            border-radius: 18px;
-            padding: 0.85rem 1rem;
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+            background: var(--paper-strong);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 0.8rem 1rem;
+            box-shadow: var(--shadow-soft);
         }
 
         div[data-testid="stRadio"] label,
         div[data-testid="stRadio"] p,
         div[data-testid="stRadio"] span {
-            color: #0f172a !important;
+            color: var(--ink) !important;
         }
 
         div[data-testid="stSlider"] [role="slider"] {
@@ -165,97 +177,277 @@ def inject_design_system():
 
         div[data-baseweb="select"] > div {
             background: #ffffff !important;
-            border-radius: 14px !important;
-            border-color: #e2e8f0 !important;
-            color: #0f172a !important;
+            border-radius: 10px !important;
+            border-color: var(--line) !important;
+            color: var(--ink) !important;
         }
 
         div[data-baseweb="select"] span,
         div[data-baseweb="select"] div {
-            color: #0f172a !important;
+            color: var(--ink) !important;
         }
 
         textarea,
         input {
             background: #ffffff !important;
-            border-radius: 14px !important;
-            border-color: #e2e8f0 !important;
-            color: #0f172a !important;
+            border-radius: 10px !important;
+            border-color: var(--line) !important;
+            color: var(--ink) !important;
         }
 
         textarea::placeholder,
         input::placeholder {
-            color: #94a3b8 !important;
+            color: #aa9b8d !important;
         }
 
         details {
-            border-radius: 16px !important;
+            border-radius: 12px !important;
+            border: 1px solid var(--line) !important;
+            background: var(--paper-strong) !important;
+            box-shadow: none !important;
+            overflow: hidden;
+        }
+
+        details summary {
+            background: #fbfaf6 !important;
+            color: var(--ink) !important;
+            border-bottom: 1px solid var(--line);
+        }
+
+        details summary *,
+        div[data-testid="stExpander"] *,
+        div[data-testid="stExpander"] p,
+        div[data-testid="stExpander"] span {
+            color: var(--ink) !important;
         }
 
         hr {
-            margin: 1.8rem 0;
-            border-color: rgba(226, 232, 240, 0.85);
+            margin: 1.6rem 0;
+            border-color: var(--line);
         }
 
         .app-hero {
             position: relative;
             overflow: hidden;
-            border-radius: 28px;
-            padding: 2rem;
-            margin-bottom: 1.3rem;
-            background:
-                linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(127, 29, 29, 0.86)),
-                url("https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1600&q=80");
-            background-size: cover;
-            background-position: center;
-            color: #ffffff;
-            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+            gap: 1.2rem;
+            align-items: stretch;
+            border-radius: 18px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            color: var(--ink);
+            box-shadow: var(--shadow);
+        }
+
+        .app-hero::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-top: 5px solid var(--primary);
+            pointer-events: none;
+        }
+
+        .app-hero__content {
+            position: relative;
+            z-index: 1;
+            padding: 0.55rem 0.4rem 0.35rem;
         }
 
         .app-hero__eyebrow {
             display: inline-flex;
             align-items: center;
-            gap: 0.45rem;
-            padding: 0.32rem 0.72rem;
+            padding: 0.3rem 0.66rem;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.16);
-            border: 1px solid rgba(255, 255, 255, 0.22);
-            font-size: 0.82rem;
-            font-weight: 700;
+            background: var(--green-soft);
+            border: 1px solid #c7e8d2;
+            color: var(--green);
+            font-size: 0.78rem;
+            font-weight: 800;
         }
 
         .app-hero h1 {
-            color: #ffffff;
-            margin: 1rem 0 0.45rem;
-            font-size: clamp(2rem, 5vw, 4rem);
-            line-height: 1.05;
+            color: var(--ink);
+            margin: 0.75rem 0 0.45rem;
+            font-size: clamp(2rem, 3.7vw, 3.25rem);
+            line-height: 1.06;
             font-weight: 900;
         }
 
         .app-hero p {
-            max-width: 48rem;
+            max-width: 44rem;
             margin: 0;
-            color: rgba(255, 255, 255, 0.86);
-            font-size: 1.04rem;
-            line-height: 1.75;
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.7;
+        }
+
+        .app-hero__panel {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            gap: 0.7rem;
+            padding: 0.85rem;
+            border-radius: 14px;
+            background: #f8f5ef;
+            border: 1px solid var(--line);
+        }
+
+        .hero-stat {
+            display: grid;
+            grid-template-columns: 2.15rem minmax(0, 1fr);
+            gap: 0.65rem;
+            align-items: center;
+            padding: 0.72rem;
+            border-radius: 12px;
+            background: #ffffff;
+            border: 1px solid #ebe6dc;
+        }
+
+        .hero-stat__icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.15rem;
+            height: 2.15rem;
+            border-radius: 10px;
+            background: #fff0e9;
+            color: var(--primary-dark);
+            font-weight: 900;
+        }
+
+        .hero-stat__title {
+            color: var(--ink);
+            font-size: 0.92rem;
+            font-weight: 900;
+            margin-bottom: 0.12rem;
+        }
+
+        .hero-stat__text {
+            color: var(--muted);
+            font-size: 0.8rem;
+            line-height: 1.45;
+        }
+
+        .hero-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .hero-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.38rem 0.68rem;
+            border-radius: 999px;
+            background: #fbfaf6;
+            border: 1px solid var(--line);
+            color: #46515a;
+            font-size: 0.82rem;
+            font-weight: 800;
+        }
+
+        .app-nav {
+            position: sticky;
+            top: 3.6rem;
+            z-index: 50;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            align-items: center;
+            margin: 0 0 1rem;
+            padding: 0.52rem;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow-soft);
+        }
+
+        .app-nav a,
+        .side-nav a {
+            text-decoration: none !important;
+        }
+
+        .app-nav__label {
+            color: var(--muted);
+            font-size: 0.82rem;
+            font-weight: 800;
+            padding: 0.32rem 0.45rem;
+        }
+
+        .app-nav__link {
+            display: inline-flex;
+            align-items: center;
+            min-height: 2rem;
+            padding: 0.42rem 0.7rem;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            color: var(--ink) !important;
+            font-size: 0.86rem;
+            font-weight: 800;
+            transition: all 0.15s ease;
+        }
+
+        .app-nav__link:hover {
+            border-color: #ffd1bf;
+            background: #fff1eb;
+            color: var(--primary-dark) !important;
+        }
+
+        .side-nav {
+            margin: 0.25rem 0 1rem;
+            padding: 0.75rem;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.64);
+        }
+
+        .side-nav__title {
+            margin-bottom: 0.5rem;
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 900;
+        }
+
+        .side-nav__link {
+            display: block;
+            padding: 0.48rem 0.55rem;
+            border-radius: 10px;
+            color: var(--ink) !important;
+            font-size: 0.9rem;
+            font-weight: 800;
+        }
+
+        .side-nav__link:hover {
+            background: #fff1eb;
+            color: var(--primary-dark) !important;
+        }
+
+        .section-anchor {
+            scroll-margin-top: 7.2rem;
+            height: 0;
         }
 
         .section-kicker {
             display: inline-flex;
             align-items: center;
-            padding: 0.35rem 0.72rem;
+            padding: 0.32rem 0.64rem;
             border-radius: 999px;
-            background: var(--accent-soft);
-            color: #115e59;
+            background: var(--green-soft);
+            color: var(--green);
             font-size: 0.82rem;
             font-weight: 800;
             margin: 0.4rem 0 0.6rem;
         }
 
         .soft-note {
-            border: 1px solid rgba(226, 232, 240, 0.95);
-            border-radius: 18px;
-            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--paper-strong);
             padding: 1rem 1.1rem;
             color: var(--muted);
             margin-bottom: 1rem;
@@ -273,33 +465,218 @@ def inject_design_system():
             align-items: center;
             border-radius: 999px;
             padding: 0.26rem 0.62rem;
-            background: #f1f5f9;
-            color: #334155;
+            background: #fff1eb;
+            color: var(--primary-dark);
             font-size: 0.82rem;
             font-weight: 700;
-            border: 1px solid #e2e8f0;
+            border: 1px solid #ffd1bf;
         }
 
         .rank-chip {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-width: 2.2rem;
-            height: 2.2rem;
-            border-radius: 999px;
-            background: #fee2e2;
-            color: #991b1b;
+            min-width: 2rem;
+            height: 2rem;
+            border-radius: 10px;
+            background: var(--primary);
+            color: #ffffff;
             font-weight: 900;
             margin-right: 0.55rem;
         }
 
         .reason-box {
-            border-radius: 14px;
+            border-radius: 10px;
             padding: 0.8rem 0.95rem;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            color: #475569;
+            background: #fbfaf6;
+            border: 1px solid var(--line);
+            color: #46515a;
             line-height: 1.65;
+        }
+
+        .review-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--paper-strong);
+            font-size: 0.9rem;
+        }
+
+        .review-table th {
+            background: #fbfaf6;
+            color: var(--ink);
+            text-align: left;
+            padding: 0.7rem 0.75rem;
+            border-bottom: 1px solid var(--line);
+            font-weight: 900;
+        }
+
+        .review-table td {
+            padding: 0.68rem 0.75rem;
+            border-bottom: 1px solid #f1e8dc;
+            color: #4f4037;
+            vertical-align: top;
+        }
+
+        .review-table tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .explain-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+            gap: 1rem;
+            align-items: start;
+        }
+
+        .explain-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--paper-strong);
+            font-size: 0.9rem;
+        }
+
+        .explain-table th {
+            background: #fbfaf6;
+            color: var(--ink);
+            text-align: left;
+            padding: 0.68rem 0.72rem;
+            border-bottom: 1px solid var(--line);
+            font-weight: 900;
+        }
+
+        .explain-table td {
+            padding: 0.64rem 0.72rem;
+            border-bottom: 1px solid #f1e8dc;
+            color: #4f4037;
+            vertical-align: top;
+        }
+
+        .explain-table tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .score-bars {
+            padding: 0.85rem;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--paper-strong);
+        }
+
+        .score-bar {
+            margin-bottom: 0.75rem;
+        }
+
+        .score-bar__label {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.28rem;
+            color: var(--ink);
+            font-size: 0.84rem;
+            font-weight: 800;
+        }
+
+        .score-bar__track {
+            height: 0.7rem;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #eee9df;
+        }
+
+        .score-bar__fill {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--primary);
+        }
+
+        .risk-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 2.1rem;
+            padding: 0.18rem 0.45rem;
+            border-radius: 999px;
+            background: var(--green-soft);
+            color: var(--green);
+            font-size: 0.78rem;
+            font-weight: 900;
+        }
+
+        .risk-badge--mid {
+            background: var(--yellow-soft);
+            color: #854d0e;
+        }
+
+        .risk-badge--high {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+            margin: 0.85rem 0 1.1rem;
+        }
+
+        .insight-panel {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: var(--paper-strong);
+            box-shadow: var(--shadow-soft);
+            padding: 1rem 1.05rem;
+        }
+
+        .insight-panel__title {
+            color: var(--ink);
+            font-weight: 900;
+            margin-bottom: 0.45rem;
+        }
+
+        .insight-panel__body {
+            color: var(--muted);
+            line-height: 1.65;
+            font-size: 0.93rem;
+        }
+
+        .mini-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--paper-strong);
+            font-size: 0.9rem;
+            margin-top: 0.8rem;
+        }
+
+        .mini-table th {
+            background: #fbfaf6;
+            color: var(--ink);
+            text-align: left;
+            padding: 0.62rem 0.7rem;
+            border-bottom: 1px solid var(--line);
+            font-weight: 900;
+        }
+
+        .mini-table td {
+            padding: 0.6rem 0.7rem;
+            border-bottom: 1px solid #f1e8dc;
+            color: #4f4037;
+            vertical-align: top;
+        }
+
+        .mini-table tr:last-child td {
+            border-bottom: 0;
         }
 
         @media (max-width: 768px) {
@@ -308,8 +685,13 @@ def inject_design_system():
                 padding-right: 1rem;
             }
             .app-hero {
-                border-radius: 20px;
-                padding: 1.35rem;
+                grid-template-columns: 1fr;
+                border-radius: 16px;
+                padding: 1rem;
+            }
+            .dashboard-grid,
+            .explain-grid {
+                grid-template-columns: 1fr;
             }
         }
         </style>
@@ -322,9 +704,39 @@ def render_page_header():
     st.markdown(
         """
         <section class="app-hero">
-            <div class="app-hero__eyebrow">餐廳與食譜推薦系統</div>
-            <h1>今天吃什麼</h1>
-            <p>依照外食條件、心情、冰箱食材與保存狀態，快速整理出更適合今天的餐廳或食譜推薦。</p>
+            <div class="app-hero__content">
+                <div class="app-hero__eyebrow">外食避雷 × 內食減浪費</div>
+                <h1>智慧飲食決策系統</h1>
+                <p>把餐廳評論、距離價格、冰箱食材與保存期限整理成可解釋的飲食建議，讓外食少踩雷、內食少浪費。</p>
+                <div class="hero-meta">
+                    <span class="hero-chip">外食決策</span>
+                    <span class="hero-chip">模型評估</span>
+                    <span class="hero-chip">食材優先級</span>
+                </div>
+            </div>
+            <div class="app-hero__panel">
+                <div class="hero-stat">
+                    <div class="hero-stat__icon">01</div>
+                    <div>
+                        <div class="hero-stat__title">評論風險分析</div>
+                        <div class="hero-stat__text">整理情緒分數、負評比例與常見疑慮。</div>
+                    </div>
+                </div>
+                <div class="hero-stat">
+                    <div class="hero-stat__icon">02</div>
+                    <div>
+                        <div class="hero-stat__title">推薦模型解釋</div>
+                        <div class="hero-stat__text">拆解分數來源，比較加入模型前後差異。</div>
+                    </div>
+                </div>
+                <div class="hero-stat">
+                    <div class="hero-stat__icon">03</div>
+                    <div>
+                        <div class="hero-stat__title">食材減浪費決策</div>
+                        <div class="hero-stat__text">依保存天數、價格與易腐程度排序。</div>
+                    </div>
+                </div>
+            </div>
         </section>
         """,
         unsafe_allow_html=True,
@@ -333,6 +745,64 @@ def render_page_header():
 
 def render_section_kicker(text):
     st.markdown(f'<div class="section-kicker">{html.escape(text)}</div>', unsafe_allow_html=True)
+
+
+def render_anchor(anchor_id):
+    st.markdown(f'<div id="{html.escape(anchor_id)}" class="section-anchor"></div>', unsafe_allow_html=True)
+
+
+def get_nav_items(current_mode):
+    if current_mode == "我要外食":
+        return [
+            ("推薦概覽", "overview"),
+            ("決策儀表板", "dashboard"),
+            ("模型評估", "evaluation"),
+            ("評論分析", "reviews"),
+            ("模型解釋", "model"),
+            ("重點摘要", "summary"),
+            ("推薦清單", "list"),
+            ("美食地圖", "map"),
+            ("資料表", "data"),
+        ]
+    return [
+        ("推薦概覽", "overview"),
+        ("決策儀表板", "dashboard"),
+        ("模型評估", "evaluation"),
+        ("食材優先級", "priority"),
+        ("推薦操作", "actions"),
+        ("食譜清單", "list"),
+        ("資料表", "data"),
+    ]
+
+
+def render_page_nav(current_mode):
+    links = "".join(
+        (
+            f'<a class="app-nav__link" href="#{anchor_id}" '
+            f'onclick="document.getElementById(&quot;{anchor_id}&quot;)?.scrollIntoView({{behavior:&quot;smooth&quot;,block:&quot;start&quot;}})">'
+            f'{html.escape(label)}</a>'
+        )
+        for label, anchor_id in get_nav_items(current_mode)
+    )
+    st.markdown(
+        f'<nav class="app-nav"><span class="app-nav__label">快速導覽</span>{links}</nav>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_sidebar_nav(current_mode):
+    links = "".join(
+        (
+            f'<a class="side-nav__link" href="#{anchor_id}" '
+            f'onclick="document.getElementById(&quot;{anchor_id}&quot;)?.scrollIntoView({{behavior:&quot;smooth&quot;,block:&quot;start&quot;}})">'
+            f'{html.escape(label)}</a>'
+        )
+        for label, anchor_id in get_nav_items(current_mode)
+    )
+    st.sidebar.markdown(
+        f'<div class="side-nav"><div class="side-nav__title">快速導覽</div>{links}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 inject_design_system()
@@ -344,6 +814,7 @@ mode = st.radio(
     horizontal=True,
     label_visibility="visible",
 )
+render_page_nav(mode)
 
 if "favorite_restaurants" not in st.session_state:
     st.session_state.favorite_restaurants = []
@@ -353,6 +824,9 @@ if "restaurant_decision" not in st.session_state:
     st.session_state.restaurant_decision = None
 if "recipe_decision" not in st.session_state:
     st.session_state.recipe_decision = None
+
+
+render_sidebar_nav(mode)
 
 
 def add_favorite(kind, name):
@@ -529,6 +1003,213 @@ def render_ingredient_priority_inputs(ingredients):
     return profiles
 
 
+def apply_review_adjustment(result, use_review_analysis, review_weight):
+    result = result.copy()
+    if not use_review_analysis or result.empty:
+        result["final_score"] = result["score"]
+        return result
+
+    weight_ratio = review_weight / 100
+    result["final_score"] = (result["score"] + result["review_adjustment"] * weight_ratio).clip(0, 110).round(1)
+    return result.sort_values(
+        by=["final_score", "sentiment_score", "score", "rating"],
+        ascending=[False, False, False, False],
+    )
+
+
+def render_review_analysis_panel(result):
+    if result.empty or "sentiment_score" not in result.columns:
+        return
+
+    review_data = result[result["review_count"] > 0]
+    with st.expander("餐廳評論文字分析", expanded=True):
+        if review_data.empty:
+            st.info("目前推薦結果沒有可分析的評論資料。")
+            return
+
+        avg_sentiment = review_data["sentiment_score"].mean()
+        avg_negative = review_data["negative_ratio"].mean()
+        high_risk_count = int((review_data["review_risk"] == "高").sum())
+        stable_count = int((review_data["review_risk"] == "低").sum())
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("平均評論情緒", f"{avg_sentiment:.1f}")
+        col2.metric("平均負評比例", f"{avg_negative:.1f}%")
+        col3.metric("低風險餐廳", stable_count)
+        col4.metric("高風險餐廳", high_risk_count)
+
+        safest = review_data.sort_values(by=["review_risk", "sentiment_score"], ascending=[True, False]).iloc[0]
+        risky = review_data.sort_values(by=["negative_ratio", "sentiment_score"], ascending=[False, True]).iloc[0]
+        st.info(
+            f"評論最穩定：{safest['name']}（情緒 {safest['sentiment_score']}，負評 {safest['negative_ratio']}%）；"
+            f"需注意：{risky['name']}（負評 {risky['negative_ratio']}%）。"
+        )
+
+        risk_classes = {"高": "risk-badge--high", "中": "risk-badge--mid", "低": ""}
+        table_rows = []
+        for _, row in review_data.iterrows():
+            risk_class = risk_classes.get(row["review_risk"], "")
+            table_rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(row['name']))}</td>"
+                f"<td>{int(row['review_count'])}</td>"
+                f"<td>{row['sentiment_score']}</td>"
+                f"<td>{row['negative_ratio']}%</td>"
+                f"<td><span class='risk-badge {risk_class}'>{html.escape(str(row['review_risk']))}</span></td>"
+                f"<td>{html.escape(str(row['positive_keywords'] or '無'))}</td>"
+                f"<td>{html.escape(str(row['negative_keywords'] or '無'))}</td>"
+                f"<td>{html.escape(str(row['review_topics'] or '無'))}</td>"
+                "</tr>"
+            )
+
+        st.markdown(
+            "<table class='review-table'>"
+            "<thead><tr>"
+            "<th>餐廳</th><th>評論數</th><th>情緒分數</th><th>負評比例</th>"
+            "<th>風險</th><th>常見優點</th><th>常見疑慮</th><th>常見主題</th>"
+            "</tr></thead>"
+            f"<tbody>{''.join(table_rows)}</tbody></table>",
+            unsafe_allow_html=True,
+        )
+
+
+def render_restaurant_model_explainer(
+    result,
+    budget,
+    max_distance,
+    category,
+    weather,
+    mood,
+    need_takeout,
+    max_spicy_level,
+    prefer_fast,
+    use_review_analysis,
+    review_weight,
+):
+    if result.empty:
+        return
+
+    with st.expander("推薦模型解釋器", expanded=True):
+        names = result["name"].tolist()
+        selected_name = st.selectbox("選擇要解釋的餐廳", names, key="restaurant_model_explainer")
+        selected = result[result["name"] == selected_name].iloc[0]
+        components, base_total = calculate_score_breakdown(
+            selected,
+            budget,
+            max_distance,
+            category,
+            weather,
+            mood,
+            need_takeout,
+            max_spicy_level,
+            prefer_fast,
+        )
+
+        rows = [
+            {"分數來源": label, "分數": score, "說明": note}
+            for label, score, note in components
+        ]
+        review_adjustment = selected.get("review_adjustment", 0) * (review_weight / 100 if use_review_analysis else 0)
+        if use_review_analysis:
+            rows.append(
+                {
+                    "分數來源": "評論調整",
+                    "分數": round(review_adjustment, 2),
+                    "說明": f"情緒分數 {selected.get('sentiment_score', 50)}，負評比例 {selected.get('negative_ratio', 0)}%",
+                }
+            )
+
+        final_score = selected.get("final_score", selected["score"])
+        max_score = max([abs(row["分數"]) for row in rows] + [1])
+        table_rows = []
+        bar_rows = []
+        for row in rows:
+            source = html.escape(str(row["分數來源"]))
+            score = float(row["分數"])
+            note = html.escape(str(row["說明"]))
+            width = min(abs(score) / max_score * 100, 100)
+            table_rows.append(
+                f"<tr><td>{source}</td><td>{score:g}</td><td>{note}</td></tr>"
+            )
+            bar_rows.append(
+                "<div class='score-bar'>"
+                f"<div class='score-bar__label'><span>{source}</span><span>{score:g}</span></div>"
+                f"<div class='score-bar__track'><div class='score-bar__fill' style='width:{width:.1f}%'></div></div>"
+                "</div>"
+            )
+
+        st.markdown(
+            "<div class='explain-grid'>"
+            "<table class='explain-table'>"
+            "<thead><tr><th>分數來源</th><th>分數</th><th>說明</th></tr></thead>"
+            f"<tbody>{''.join(table_rows)}</tbody></table>"
+            f"<div class='score-bars'>{''.join(bar_rows)}</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+        st.info(
+            f"{selected_name} 的基礎分數為 {base_total}，"
+            f"評論加權後最終分數為 {final_score}。"
+        )
+
+
+def render_restaurant_sensitivity_analysis(result):
+    if result.empty:
+        return
+
+    with st.expander("權重敏感度分析", expanded=False):
+        scenario_definitions = [
+            ("目前排序", "final_score" if "final_score" in result.columns else "score", False),
+            ("省錢優先", "cp_score", False),
+            ("距離優先", "distance", True),
+            ("評分優先", "rating", False),
+        ]
+        if "sentiment_score" in result.columns:
+            scenario_definitions.append(("口碑優先", "sentiment_score", False))
+            scenario_definitions.append(("低負評優先", "negative_ratio", True))
+
+        rows = []
+        for scenario, column, ascending in scenario_definitions:
+            winner = result.sort_values(by=[column], ascending=[ascending]).iloc[0]
+            rows.append(
+                {
+                    "情境": scenario,
+                    "第一名": winner["name"],
+                    "排序指標": column,
+                    "指標值": winner[column],
+                    "原推薦分數": winner["score"],
+                    "最終分數": winner.get("final_score", winner["score"]),
+                }
+            )
+
+        table_rows = []
+        for row in rows:
+            table_rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(row['情境']))}</td>"
+                f"<td>{html.escape(str(row['第一名']))}</td>"
+                f"<td>{html.escape(str(row['排序指標']))}</td>"
+                f"<td>{row['指標值']}</td>"
+                f"<td>{row['原推薦分數']}</td>"
+                f"<td>{row['最終分數']}</td>"
+                "</tr>"
+            )
+        st.markdown(
+            "<table class='explain-table'>"
+            "<thead><tr><th>情境</th><th>第一名</th><th>排序指標</th><th>指標值</th><th>原推薦分數</th><th>最終分數</th></tr></thead>"
+            f"<tbody>{''.join(table_rows)}</tbody></table>",
+            unsafe_allow_html=True,
+        )
+        current_winner = rows[0]["第一名"]
+        changed = [row for row in rows[1:] if row["第一名"] != current_winner]
+        if changed:
+            changed_text = "、".join(f"{row['情境']}會改成 {row['第一名']}" for row in changed[:3])
+            st.warning(f"排名對使用者偏好有敏感度：{changed_text}。")
+        else:
+            st.success("不同情境下第一名大致穩定，代表目前推薦結果相對穩健。")
+
+
 def apply_ingredient_priority_to_recipes(result, priority_profiles):
     if result.empty or not priority_profiles:
         result = result.copy()
@@ -580,7 +1261,7 @@ def render_ingredient_priority_summary(priority_profiles):
 
     with st.expander("食材使用優先級排序", expanded=True):
         st.caption("排序比值概念參考鞋匠排程問題：浪費成本越高、剩餘時間越短，越應該優先處理。")
-        st.dataframe(rows, hide_index=True, use_container_width=True)
+        st.dataframe(rows, hide_index=True, width="stretch")
         top_items = [row["食材"] for row in rows if row["優先級"] == "高"] or [rows[0]["食材"]]
         st.info(f"今日建議優先使用：{'、'.join(top_items[:3])}")
 
@@ -643,6 +1324,10 @@ def get_restaurant_tags(row):
         tags.append("不辣")
     if row["takeout"] == "yes":
         tags.append("可外帶")
+    if row.get("sentiment_score", 50) >= 75:
+        tags.append("評論穩定")
+    if row.get("review_risk", "") == "高":
+        tags.append("評論風險")
     return tags[:5]
 
 
@@ -673,7 +1358,9 @@ def render_restaurant_card(rank, row):
         elif action_col.button("收藏", key=f"restaurant_fav_{rank}_{row['name']}"):
             add_favorite("restaurant", row["name"])
             st.rerun()
-        score_col.metric("推薦分數", f"{row['score']}")
+        score_col.metric("推薦分數", f"{row.get('final_score', row['score'])}")
+        if row.get("review_adjustment", 0) != 0:
+            score_col.caption(f"評論調整 {row['review_adjustment']:+.1f}")
         render_tags(get_restaurant_tags(row))
 
         info_col1, info_col2, info_col3, info_col4 = st.columns(4)
@@ -685,6 +1372,11 @@ def render_restaurant_card(rank, row):
         info_col3.write(f"辣度：{row['spicy_level']} / 5")
         info_col4.write(f"CP 值：{row['cp_score']}")
         info_col4.write(f"外帶：{row['takeout']}")
+        if "sentiment_score" in row:
+            info_col4.write(f"評論情緒：{row['sentiment_score']}")
+            info_col4.write(f"負評比例：{row['negative_ratio']}%")
+        if row.get("review_summary", ""):
+            st.caption(f"評論摘要：{row['review_summary']}")
         render_reason(row["reason"])
 
 
@@ -719,6 +1411,8 @@ def render_restaurant_map(result):
         距離：{row['distance']} 分鐘<br>
         推薦分數：{row['score']}<br>
         CP值：{cp_score:.2f}<br>
+        評論情緒：{row.get('sentiment_score', '無資料')}<br>
+        負評比例：{row.get('negative_ratio', 0)}%<br>
         推薦理由：{html.escape(str(row['reason']))}
         """
         marker_color = get_cp_marker_color(cp_score, rank)
@@ -738,11 +1432,15 @@ def render_restaurant_highlights(result):
     best_cp = result.sort_values(by=["cp_score", "score"], ascending=[False, False]).iloc[0]
     nearest = result.sort_values(by=["distance", "score"], ascending=[True, False]).iloc[0]
     best_rating = result.sort_values(by=["rating", "score"], ascending=[False, False]).iloc[0]
-    st.info(
+    message = (
         f"本次推薦重點：最高 CP 值是 {best_cp['name']}（CP {best_cp['cp_score']}）；"
         f"最近的是 {nearest['name']}（{nearest['distance']} 分鐘）；"
         f"最高評分是 {best_rating['name']}（{best_rating['rating']} 分）。"
     )
+    if "sentiment_score" in result.columns:
+        best_review = result.sort_values(by=["sentiment_score", "negative_ratio"], ascending=[False, True]).iloc[0]
+        message += f" 評論最穩定的是 {best_review['name']}（情緒 {best_review['sentiment_score']}）。"
+    st.info(message)
 
 
 def render_recipe_highlights(result):
@@ -771,28 +1469,16 @@ def render_restaurant_comparison(result):
 
         left = result[result["name"] == left_name].iloc[0]
         right = result[result["name"] == right_name].iloc[0]
-        comparison = {
-            "比較項目": ["推薦分數", "平均價格", "距離", "評分", "CP 值", "出餐速度", "外帶"],
-            left_name: [
-                left["score"],
-                f"{left['price']} 元",
-                f"{left['distance']} 分鐘",
-                left["rating"],
-                left["cp_score"],
-                left["serve_speed"],
-                left["takeout"],
-            ],
-            right_name: [
-                right["score"],
-                f"{right['price']} 元",
-                f"{right['distance']} 分鐘",
-                right["rating"],
-                right["cp_score"],
-                right["serve_speed"],
-                right["takeout"],
-            ],
-        }
-        st.dataframe(comparison, hide_index=True, use_container_width=True)
+        comparison_rows = [
+            {"比較項目": "推薦分數", left_name: str(left["score"]), right_name: str(right["score"])},
+            {"比較項目": "平均價格", left_name: f"{left['price']} 元", right_name: f"{right['price']} 元"},
+            {"比較項目": "距離", left_name: f"{left['distance']} 分鐘", right_name: f"{right['distance']} 分鐘"},
+            {"比較項目": "評分", left_name: str(left["rating"]), right_name: str(right["rating"])},
+            {"比較項目": "CP 值", left_name: str(left["cp_score"]), right_name: str(right["cp_score"])},
+            {"比較項目": "出餐速度", left_name: str(left["serve_speed"]), right_name: str(right["serve_speed"])},
+            {"比較項目": "外帶", left_name: str(left["takeout"]), right_name: str(right["takeout"])},
+        ]
+        st.dataframe(comparison_rows, hide_index=True, width="stretch")
 
         if left["score"] > right["score"]:
             st.success(f"綜合分數較推薦：{left_name}")
@@ -814,28 +1500,16 @@ def render_recipe_comparison(result):
 
         left = result[result["name"] == left_name].iloc[0]
         right = result[result["name"] == right_name].iloc[0]
-        comparison = {
-            "比較項目": ["推薦分數", "料理時間", "熱量", "難度", "符合食材數", "缺少食材數", "缺少食材"],
-            left_name: [
-                left.get("final_score", left["score"]),
-                f"{left['time']} 分鐘",
-                f"{left['calories']} kcal",
-                left["difficulty"],
-                left["matched_count"],
-                left["missing_count"],
-                left["missing_ingredients"] or "無",
-            ],
-            right_name: [
-                right.get("final_score", right["score"]),
-                f"{right['time']} 分鐘",
-                f"{right['calories']} kcal",
-                right["difficulty"],
-                right["matched_count"],
-                right["missing_count"],
-                right["missing_ingredients"] or "無",
-            ],
-        }
-        st.dataframe(comparison, hide_index=True, use_container_width=True)
+        comparison_rows = [
+            {"比較項目": "推薦分數", left_name: str(left.get("final_score", left["score"])), right_name: str(right.get("final_score", right["score"]))},
+            {"比較項目": "料理時間", left_name: f"{left['time']} 分鐘", right_name: f"{right['time']} 分鐘"},
+            {"比較項目": "熱量", left_name: f"{left['calories']} kcal", right_name: f"{right['calories']} kcal"},
+            {"比較項目": "難度", left_name: str(left["difficulty"]), right_name: str(right["difficulty"])},
+            {"比較項目": "符合食材數", left_name: str(left["matched_count"]), right_name: str(right["matched_count"])},
+            {"比較項目": "缺少食材數", left_name: str(left["missing_count"]), right_name: str(right["missing_count"])},
+            {"比較項目": "缺少食材", left_name: left["missing_ingredients"] or "無", right_name: right["missing_ingredients"] or "無"},
+        ]
+        st.dataframe(comparison_rows, hide_index=True, width="stretch")
 
         if left["missing_count"] < right["missing_count"]:
             st.success(f"食材準備較容易：{left_name}")
@@ -868,7 +1542,7 @@ def render_shopping_list(result):
             for ingredient, count in sorted(missing_counts.items(), key=lambda item: (-item[1], item[0]))
         ]
         st.caption("依照目前推薦結果統計，出現次數越高，代表越常是推薦食譜會用到但你目前沒有的食材。")
-        st.dataframe(shopping_rows, hide_index=True, use_container_width=True)
+        st.dataframe(shopping_rows, hide_index=True, width="stretch")
 
         names = result["name"].tolist()
         selected_name = st.selectbox("查看單一道食譜需要補買什麼", names, key="shopping_recipe_select")
@@ -878,6 +1552,347 @@ def render_shopping_list(result):
             st.write("、".join(missing_items))
         else:
             st.success(f"{selected_name} 目前不需要補買食材。")
+
+
+def render_restaurant_decision_dashboard(result, all_restaurants, review_analysis, use_review_analysis):
+    full_review_data = merge_review_analysis(all_restaurants, review_analysis)
+    review_ready = not full_review_data.empty and full_review_data["review_count"].sum() > 0
+
+    with st.expander("外食決策分析 Dashboard", expanded=True):
+        if result.empty:
+            st.info("目前沒有推薦結果可分析，放寬條件後會顯示決策儀表板。")
+            return
+
+        final_column = "final_score" if "final_score" in result.columns else "score"
+        best = result.sort_values(by=[final_column], ascending=False).iloc[0]
+        avg_negative = result["negative_ratio"].mean() if "negative_ratio" in result.columns else 0
+        risk_count = int((result["review_risk"] == "高").sum()) if "review_risk" in result.columns else 0
+        stable_count = int((result["review_risk"] == "低").sum()) if "review_risk" in result.columns else 0
+
+        metric1, metric2, metric3, metric4 = st.columns(4)
+        metric1.metric("決策候選數", len(result))
+        metric2.metric("最佳選項", best["name"])
+        metric3.metric("平均負評比例", f"{avg_negative:.1f}%")
+        metric4.metric("評論低風險", stable_count, delta=f"高風險 {risk_count}")
+
+        strongest_review = result.sort_values(by=["review_adjustment"], ascending=False).iloc[0]
+        weakest_review = result.sort_values(by=["review_adjustment"], ascending=True).iloc[0]
+        price_friendly = result.sort_values(by=["price", final_column], ascending=[True, False]).iloc[0]
+        review_note = "已納入評論文字分析" if use_review_analysis else "目前未納入評論文字分析"
+
+        st.markdown(
+            "<div class='dashboard-grid'>"
+            "<div class='insight-panel'>"
+            "<div class='insight-panel__title'>評論如何影響推薦</div>"
+            f"<div class='insight-panel__body'>{review_note}。"
+            f"本次評論加分最高的是 <b>{html.escape(str(strongest_review['name']))}</b>"
+            f"（{strongest_review['review_adjustment']:+.1f}），"
+            f"最需要注意的是 <b>{html.escape(str(weakest_review['name']))}</b>"
+            f"（{weakest_review['review_adjustment']:+.1f}）。</div>"
+            "</div>"
+            "<div class='insight-panel'>"
+            "<div class='insight-panel__title'>決策建議摘要</div>"
+            f"<div class='insight-panel__body'>若只看綜合決策，建議優先考慮 "
+            f"<b>{html.escape(str(best['name']))}</b>；若今天想省錢，"
+            f"可改看 <b>{html.escape(str(price_friendly['name']))}</b>"
+            f"（約 {price_friendly['price']} 元）。</div>"
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+        dashboard_rows = []
+        for _, row in result.sort_values(by=[final_column], ascending=False).head(5).iterrows():
+            score_delta = row.get("final_score", row["score"]) - row["score"]
+            dashboard_rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(row['name']))}</td>"
+                f"<td>{row['score']}</td>"
+                f"<td>{row.get('final_score', row['score'])}</td>"
+                f"<td>{score_delta:+.1f}</td>"
+                f"<td>{row.get('negative_ratio', 0)}%</td>"
+                f"<td>{html.escape(str(row.get('review_risk', '未知')))}</td>"
+                "</tr>"
+            )
+        st.markdown(
+            "<table class='mini-table'>"
+            "<thead><tr><th>餐廳</th><th>原始分數</th><th>最終分數</th><th>評論影響</th><th>負評比例</th><th>風險</th></tr></thead>"
+            f"<tbody>{''.join(dashboard_rows)}</tbody></table>",
+            unsafe_allow_html=True,
+        )
+
+        if review_ready:
+            category_risk = (
+                full_review_data.groupby("category", as_index=False)
+                .agg(
+                    平均負評比例=("negative_ratio", "mean"),
+                    平均情緒分數=("sentiment_score", "mean"),
+                    餐廳數=("name", "count"),
+                )
+                .sort_values(by=["平均負評比例", "平均情緒分數"], ascending=[False, True])
+                .head(5)
+            )
+            category_rows = []
+            for _, row in category_risk.iterrows():
+                category_rows.append(
+                    "<tr>"
+                    f"<td>{html.escape(str(row['category']))}</td>"
+                    f"<td>{row['平均負評比例']:.1f}%</td>"
+                    f"<td>{row['平均情緒分數']:.1f}</td>"
+                    f"<td>{int(row['餐廳數'])}</td>"
+                    "</tr>"
+                )
+            st.markdown(
+                "<table class='mini-table'>"
+                "<thead><tr><th>餐點類型</th><th>平均負評比例</th><th>平均情緒</th><th>資料筆數</th></tr></thead>"
+                f"<tbody>{''.join(category_rows)}</tbody></table>",
+                unsafe_allow_html=True,
+            )
+
+
+def render_recipe_decision_dashboard(result, all_recipes, current_ingredients, priority_profiles):
+    with st.expander("內食決策分析 Dashboard", expanded=True):
+        if result.empty:
+            st.info("目前沒有推薦結果可分析，放寬條件或增加食材後會顯示決策儀表板。")
+            return
+
+        score_column = "final_score" if "final_score" in result.columns else "score"
+        best = result.sort_values(by=[score_column], ascending=False).iloc[0]
+        cookable_count = int((result["missing_count"] == 0).sum())
+        avg_missing = result["missing_count"].mean()
+        avg_time = result["time"].mean()
+        high_priority_items = [
+            name
+            for name, profile in priority_profiles.items()
+            if profile.get("level") == "高"
+        ]
+        waste_value = sum(
+            profile.get("price", 0)
+            for profile in priority_profiles.values()
+            if profile.get("level") == "高"
+        )
+
+        metric1, metric2, metric3, metric4 = st.columns(4)
+        metric1.metric("目前食材數", len(current_ingredients))
+        metric2.metric("可直接料理", cookable_count)
+        metric3.metric("平均缺少食材", f"{avg_missing:.1f} 項")
+        metric4.metric("高優先食材", len(high_priority_items), delta=f"約 {waste_value:.0f} 元")
+
+        best_use = result.sort_values(
+            by=["priority_bonus", "matched_count", score_column],
+            ascending=[False, False, False],
+        ).iloc[0]
+        fastest = result.sort_values(by=["time", score_column], ascending=[True, False]).iloc[0]
+
+        st.markdown(
+            "<div class='dashboard-grid'>"
+            "<div class='insight-panel'>"
+            "<div class='insight-panel__title'>食材保存決策</div>"
+            f"<div class='insight-panel__body'>目前最應優先處理的食材："
+            f"<b>{html.escape('、'.join(high_priority_items) if high_priority_items else '尚無高風險食材')}</b>。"
+            f"系統會把這些食材轉成推薦加權，讓快過期或成本較高的食材更容易被用掉。</div>"
+            "</div>"
+            "<div class='insight-panel'>"
+            "<div class='insight-panel__title'>料理策略建議</div>"
+            f"<div class='insight-panel__body'>綜合分數最高的是 "
+            f"<b>{html.escape(str(best['name']))}</b>；"
+            f"若要最快完成，可選 <b>{html.escape(str(fastest['name']))}</b>"
+            f"（{fastest['time']} 分鐘）；"
+            f"最能利用高優先食材的是 <b>{html.escape(str(best_use['name']))}</b>。</div>"
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+        fit_rows = []
+        for _, row in result.sort_values(by=[score_column], ascending=False).head(5).iterrows():
+            fit_rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(row['name']))}</td>"
+                f"<td>{row.get(score_column, row['score'])}</td>"
+                f"<td>{row['matched_count']}</td>"
+                f"<td>{row['missing_count']}</td>"
+                f"<td>{row['time']} 分鐘</td>"
+                f"<td>{row.get('priority_bonus', 0)}</td>"
+                "</tr>"
+            )
+        st.markdown(
+            "<table class='mini-table'>"
+            "<thead><tr><th>食譜</th><th>最終分數</th><th>符合食材</th><th>缺少食材</th><th>時間</th><th>保存加權</th></tr></thead>"
+            f"<tbody>{''.join(fit_rows)}</tbody></table>",
+            unsafe_allow_html=True,
+        )
+
+        category_summary = (
+            all_recipes.groupby("category", as_index=False)
+            .agg(食譜數=("name", "count"), 平均時間=("time", "mean"), 平均熱量=("calories", "mean"))
+            .sort_values(by=["食譜數", "平均時間"], ascending=[False, True])
+            .head(6)
+        )
+        category_rows = []
+        for _, row in category_summary.iterrows():
+            category_rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(row['category']))}</td>"
+                f"<td>{int(row['食譜數'])}</td>"
+                f"<td>{row['平均時間']:.1f} 分鐘</td>"
+                f"<td>{row['平均熱量']:.0f} kcal</td>"
+                "</tr>"
+            )
+        st.markdown(
+            "<table class='mini-table'>"
+            "<thead><tr><th>食譜類型</th><th>資料筆數</th><th>平均時間</th><th>平均熱量</th></tr></thead>"
+            f"<tbody>{''.join(category_rows)}</tbody></table>",
+            unsafe_allow_html=True,
+        )
+
+
+def calculate_top_overlap(left_names, right_names):
+    left_set = set(left_names)
+    right_set = set(right_names)
+    if not left_set and not right_set:
+        return 0
+    return round(len(left_set & right_set) / max(len(left_set | right_set), 1) * 100, 1)
+
+
+def render_restaurant_model_evaluation(baseline_result, enhanced_result, top_n, use_review_analysis):
+    with st.expander("外食模型評估：評論分析前後比較", expanded=True):
+        if baseline_result.empty or enhanced_result.empty:
+            st.info("目前資料不足，無法進行模型評估。")
+            return
+
+        baseline_top = baseline_result.head(top_n).copy()
+        enhanced_top = enhanced_result.head(top_n).copy()
+        baseline_names = baseline_top["name"].tolist()
+        enhanced_names = enhanced_top["name"].tolist()
+        overlap = calculate_top_overlap(baseline_names, enhanced_names)
+        first_changed = baseline_names[0] != enhanced_names[0]
+        baseline_negative = baseline_top["negative_ratio"].mean() if "negative_ratio" in baseline_top.columns else 0
+        enhanced_negative = enhanced_top["negative_ratio"].mean() if "negative_ratio" in enhanced_top.columns else 0
+        baseline_sentiment = baseline_top["sentiment_score"].mean() if "sentiment_score" in baseline_top.columns else 50
+        enhanced_sentiment = enhanced_top["sentiment_score"].mean() if "sentiment_score" in enhanced_top.columns else 50
+
+        metric1, metric2, metric3, metric4 = st.columns(4)
+        metric1.metric("Top 清單重疊率", f"{overlap:.1f}%")
+        metric2.metric("第一名是否改變", "是" if first_changed else "否")
+        metric3.metric("平均負評比例變化", f"{enhanced_negative:.1f}%", delta=f"{enhanced_negative - baseline_negative:+.1f}%")
+        metric4.metric("平均評論情緒變化", f"{enhanced_sentiment:.1f}", delta=f"{enhanced_sentiment - baseline_sentiment:+.1f}")
+
+        mode_note = "目前排序已啟用評論分析。" if use_review_analysis else "目前排序未啟用評論分析，以下用模擬方式呈現評論分析可造成的差異。"
+        st.caption(mode_note)
+
+        baseline_rank = {name: index + 1 for index, name in enumerate(baseline_names)}
+        enhanced_rank = {name: index + 1 for index, name in enumerate(enhanced_names)}
+        comparison_names = list(dict.fromkeys(baseline_names + enhanced_names))
+        rows = []
+        for name in comparison_names:
+            base_row = baseline_top[baseline_top["name"] == name]
+            enhanced_row = enhanced_top[enhanced_top["name"] == name]
+            row_source = enhanced_row if not enhanced_row.empty else base_row
+            source = row_source.iloc[0]
+            before = baseline_rank.get(name, "未進入")
+            after = enhanced_rank.get(name, "未進入")
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(name))}</td>"
+                f"<td>{before}</td>"
+                f"<td>{after}</td>"
+                f"<td>{source.get('score', 0)}</td>"
+                f"<td>{source.get('final_score', source.get('score', 0))}</td>"
+                f"<td>{source.get('review_adjustment', 0):+.1f}</td>"
+                f"<td>{source.get('negative_ratio', 0)}%</td>"
+                "</tr>"
+            )
+
+        st.markdown(
+            "<table class='mini-table'>"
+            "<thead><tr><th>餐廳</th><th>原始排名</th><th>評論後排名</th><th>原始分數</th><th>最終分數</th><th>評論調整</th><th>負評比例</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table>",
+            unsafe_allow_html=True,
+        )
+
+        if enhanced_negative < baseline_negative:
+            st.success("評估結果：加入評論分析後，推薦清單的平均負評比例下降，代表系統更偏向避開評論風險較高的餐廳。")
+        elif enhanced_sentiment > baseline_sentiment:
+            st.success("評估結果：加入評論分析後，推薦清單的平均評論情緒上升，代表系統更偏向口碑穩定的餐廳。")
+        else:
+            st.info("評估結果：本次條件下評論分析沒有明顯改善平均風險，但仍提供排序解釋與避雷資訊。")
+
+
+def render_recipe_model_evaluation(baseline_result, enhanced_result, top_n, priority_profiles):
+    with st.expander("內食模型評估：保存優先級前後比較", expanded=True):
+        if baseline_result.empty or enhanced_result.empty:
+            st.info("目前資料不足，無法進行模型評估。")
+            return
+
+        baseline_top = baseline_result.head(top_n).copy()
+        enhanced_top = enhanced_result.head(top_n).copy()
+        baseline_names = baseline_top["name"].tolist()
+        enhanced_names = enhanced_top["name"].tolist()
+        overlap = calculate_top_overlap(baseline_names, enhanced_names)
+        first_changed = baseline_names[0] != enhanced_names[0]
+        baseline_bonus = baseline_top.get("priority_bonus", 0)
+        enhanced_bonus = enhanced_top.get("priority_bonus", 0)
+        baseline_missing = baseline_top["missing_count"].mean()
+        enhanced_missing = enhanced_top["missing_count"].mean()
+
+        high_priority_items = {
+            name
+            for name, profile in priority_profiles.items()
+            if profile.get("level") == "高"
+        }
+
+        def count_high_priority_usage(data):
+            if not high_priority_items or "priority_ingredients" not in data.columns:
+                return 0
+            total = 0
+            for value in data["priority_ingredients"]:
+                total += len(parse_ingredients(value) & high_priority_items)
+            return total
+
+        baseline_usage = count_high_priority_usage(baseline_top)
+        enhanced_usage = count_high_priority_usage(enhanced_top)
+
+        metric1, metric2, metric3, metric4 = st.columns(4)
+        metric1.metric("Top 清單重疊率", f"{overlap:.1f}%")
+        metric2.metric("第一名是否改變", "是" if first_changed else "否")
+        metric3.metric("平均缺少食材變化", f"{enhanced_missing:.1f}", delta=f"{enhanced_missing - baseline_missing:+.1f}")
+        metric4.metric("高優先食材使用次數", enhanced_usage, delta=f"{enhanced_usage - baseline_usage:+d}")
+
+        rows = []
+        baseline_rank = {name: index + 1 for index, name in enumerate(baseline_names)}
+        enhanced_rank = {name: index + 1 for index, name in enumerate(enhanced_names)}
+        comparison_names = list(dict.fromkeys(baseline_names + enhanced_names))
+        for name in comparison_names:
+            base_row = baseline_top[baseline_top["name"] == name]
+            enhanced_row = enhanced_top[enhanced_top["name"] == name]
+            row_source = enhanced_row if not enhanced_row.empty else base_row
+            source = row_source.iloc[0]
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(name))}</td>"
+                f"<td>{baseline_rank.get(name, '未進入')}</td>"
+                f"<td>{enhanced_rank.get(name, '未進入')}</td>"
+                f"<td>{source.get('score', 0)}</td>"
+                f"<td>{source.get('final_score', source.get('score', 0))}</td>"
+                f"<td>{source.get('priority_bonus', 0)}</td>"
+                f"<td>{html.escape(str(source.get('priority_ingredients', '') or '無'))}</td>"
+                "</tr>"
+            )
+
+        st.markdown(
+            "<table class='mini-table'>"
+            "<thead><tr><th>食譜</th><th>原始排名</th><th>保存加權後排名</th><th>原始分數</th><th>最終分數</th><th>保存加權</th><th>優先食材</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table>",
+            unsafe_allow_html=True,
+        )
+
+        if enhanced_usage > baseline_usage:
+            st.success("評估結果：加入保存優先級後，推薦清單更常使用高優先食材，有助於降低食材浪費。")
+        elif enhanced_missing <= baseline_missing:
+            st.success("評估結果：加入保存優先級後，推薦清單沒有增加準備難度，仍維持可料理性。")
+        else:
+            st.info("評估結果：本次條件下保存優先級改變有限，可調整食材保存資訊觀察排序變化。")
 
 
 def render_recipe_card(rank, row):
@@ -911,6 +1926,7 @@ def render_recipe_card(rank, row):
 
 if mode == "我要外食":
     df = load_data("restaurants.csv")
+    review_analysis = analyze_reviews(load_reviews("reviews.csv"))
 
     st.sidebar.header("外食條件")
     st.sidebar.caption("先設定最常用的條件，需要更細再展開進階條件。")
@@ -930,7 +1946,13 @@ if mode == "我要外食":
         min_rating = st.slider("最低評分", 0.0, 5.0, 0.0, step=0.1)
         top_n = st.slider("顯示推薦筆數", 3, 10, 5)
 
-    result = recommend_restaurants(
+    with st.sidebar.expander("評論分析", expanded=True):
+        use_review_analysis = st.checkbox("納入評論文字分析", value=True)
+        review_weight = st.slider("評論影響權重", 0, 100, 60, step=10)
+        max_negative_ratio = st.slider("可接受負評比例", 0, 100, 60, step=5)
+        hide_high_risk = st.checkbox("隱藏高風險評論餐廳")
+
+    candidate_result = recommend_restaurants(
         df,
         budget,
         max_distance,
@@ -940,12 +1962,23 @@ if mode == "我要外食":
         need_takeout,
         max_spicy_level,
         prefer_fast,
-        top_n,
+        len(df),
         sort_by,
         min_rating,
     )
+    evaluation_baseline = merge_review_analysis(candidate_result, review_analysis)
+    evaluation_baseline["final_score"] = evaluation_baseline["score"]
+    evaluation_enhanced = apply_review_adjustment(evaluation_baseline, True, review_weight)
 
-    render_section_kicker("外食推薦")
+    result = evaluation_baseline.copy()
+    if use_review_analysis:
+        result = result[result["negative_ratio"] <= max_negative_ratio]
+        if hide_high_risk:
+            result = result[result["review_risk"] != "高"]
+    result = apply_review_adjustment(result, use_review_analysis, review_weight).head(top_n)
+
+    render_anchor("overview")
+    render_section_kicker("外食決策")
     st.markdown(
         '<div class="soft-note">系統會綜合預算、距離、心情、天氣、評分與 CP 值，產生今天最適合的外食選項。</div>',
         unsafe_allow_html=True,
@@ -957,7 +1990,10 @@ if mode == "我要外食":
             st.session_state.restaurant_decision = None
 
     st.info(f"目前情緒策略：{get_mood_strategy(mood)}")
-    st.caption(f"排序方式：{sort_by}｜最低評分：{min_rating:.1f}｜顯示 {top_n} 筆")
+    st.caption(
+        f"排序方式：{sort_by}｜最低評分：{min_rating:.1f}｜顯示 {top_n} 筆｜"
+        f"評論分析：{'啟用' if use_review_analysis else '未啟用'}"
+    )
 
     decision_col, clear_decision_col, _ = st.columns([1.2, 1.2, 3])
     if decision_col.button("幫我決定", disabled=result.empty, help="從目前推薦結果中隨機選一間"):
@@ -977,7 +2013,32 @@ if mode == "我要外食":
         surprise = result.sample(1, random_state=int(result["score"].sum() * 10)).iloc[0]
         st.success(f"今日驚喜推薦：{surprise['name']}｜推薦分數 {surprise['score']}｜{surprise['reason']}")
 
+    render_anchor("dashboard")
+    render_restaurant_decision_dashboard(result, df, review_analysis, use_review_analysis)
 
+    render_anchor("evaluation")
+    render_restaurant_model_evaluation(evaluation_baseline, evaluation_enhanced, top_n, use_review_analysis)
+
+    render_anchor("reviews")
+    render_review_analysis_panel(result)
+
+    render_anchor("model")
+    render_restaurant_model_explainer(
+        result,
+        budget,
+        max_distance,
+        category,
+        weather,
+        mood,
+        need_takeout,
+        max_spicy_level,
+        prefer_fast,
+        use_review_analysis,
+        review_weight,
+    )
+    render_restaurant_sensitivity_analysis(result)
+
+    render_anchor("summary")
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
     summary_col1.metric("本次推薦筆數", len(result))
     if result.empty:
@@ -994,18 +2055,21 @@ if mode == "我要外食":
     render_restaurant_comparison(result)
 
     st.divider()
+    render_anchor("list")
     render_section_kicker("推薦清單")
-    st.subheader(f"外食推薦前 {top_n} 名")
+    st.subheader(f"外食決策建議前 {top_n} 名")
     if result.empty:
         st.warning("目前條件太嚴格，沒有找到符合的餐廳。可以降低最低評分、放寬距離或調整餐點類型。")
     for rank, (_, row) in enumerate(result.iterrows(), start=1):
         render_restaurant_card(rank, row)
 
     st.divider()
+    render_anchor("map")
     render_restaurant_map(result)
 
+    render_anchor("data")
     with st.expander("查看完整餐廳資料表", expanded=False):
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")
 
 else:
     recipes = load_recipes("recipes.csv")
@@ -1047,13 +2111,16 @@ else:
         only_cookable,
     )
     result = apply_ingredient_priority_to_recipes(candidate_result, priority_profiles).head(top_n)
+    evaluation_baseline = candidate_result.copy()
+    evaluation_enhanced = apply_ingredient_priority_to_recipes(candidate_result, priority_profiles)
 
     if st.session_state.recipe_decision is not None:
         current_recipe_names = set(result["name"].tolist())
         if st.session_state.recipe_decision["name"] not in current_recipe_names:
             st.session_state.recipe_decision = None
 
-    render_section_kicker("內食推薦")
+    render_anchor("overview")
+    render_section_kicker("內食決策")
     st.markdown(
         '<div class="soft-note">系統會依照冰箱食材、料理時間、熱量與食材保存狀態，優先推薦更適合先做的食譜。</div>',
         unsafe_allow_html=True,
@@ -1070,9 +2137,17 @@ else:
         summary_col3.metric("平均熱量", f"{result['calories'].mean():.0f} kcal")
         summary_col4.metric("最高分數", f"{result['final_score'].max():.1f}")
 
+    render_anchor("dashboard")
+    render_recipe_decision_dashboard(result, recipes, current_ingredients, priority_profiles)
+
+    render_anchor("evaluation")
+    render_recipe_model_evaluation(evaluation_baseline, evaluation_enhanced, top_n, priority_profiles)
+
+    render_anchor("priority")
     render_ingredient_priority_summary(priority_profiles)
 
     st.divider()
+    render_anchor("actions")
     decision_col, clear_decision_col, _ = st.columns([1.2, 1.2, 3])
     if decision_col.button("幫我決定", disabled=result.empty, help="從目前推薦食譜中隨機選一道"):
         pick = result.sample(1).iloc[0]
@@ -1092,8 +2167,9 @@ else:
     render_recipe_comparison(result)
     render_shopping_list(result)
 
+    render_anchor("list")
     render_section_kicker("推薦清單")
-    st.subheader(f"內食食譜推薦前 {top_n} 名")
+    st.subheader(f"內食食譜決策建議前 {top_n} 名")
     display_ingredients = "、".join(sorted(parse_ingredients(ingredient_text))) or "尚未輸入"
     st.caption(f"目前食材：{display_ingredients}")
 
@@ -1102,5 +2178,6 @@ else:
     for rank, (_, row) in enumerate(result.iterrows(), start=1):
         render_recipe_card(rank, row)
 
+    render_anchor("data")
     with st.expander("查看完整食譜資料表", expanded=False):
-        st.dataframe(recipes, use_container_width=True)
+        st.dataframe(recipes, width="stretch")
