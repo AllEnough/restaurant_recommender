@@ -1,10 +1,16 @@
 import hashlib
 import html
+import math
 from datetime import date, datetime
 
 import folium
 import streamlit as st
 from streamlit_folium import st_folium
+
+try:
+    from streamlit_js_eval import get_geolocation
+except ImportError:
+    get_geolocation = None
 
 from recommender import (
     calculate_score_breakdown,
@@ -883,6 +889,69 @@ def detect_meal_time(current_time=None):
     return "宵夜"
 
 
+LOCATION_PRESETS = {
+    "逢甲大學": {"latitude": 24.1790, "longitude": 120.6466},
+    "逢甲夜市": {"latitude": 24.1778, "longitude": 120.6458},
+    "文華路商圈": {"latitude": 24.1769, "longitude": 120.6450},
+    "西屯路口": {"latitude": 24.1760, "longitude": 120.6480},
+}
+
+
+def haversine_distance_meters(lat1, lon1, lat2, lon2):
+    earth_radius = 6371000
+    phi1 = math.radians(float(lat1))
+    phi2 = math.radians(float(lat2))
+    delta_phi = math.radians(float(lat2) - float(lat1))
+    delta_lambda = math.radians(float(lon2) - float(lon1))
+    a = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    return earth_radius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def normalize_browser_location(raw_location):
+    if not raw_location:
+        return None
+    coords = raw_location.get("coords", raw_location)
+    try:
+        latitude = float(coords["latitude"])
+        longitude = float(coords["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "accuracy": coords.get("accuracy"),
+        "source": "瀏覽器定位",
+    }
+
+
+def apply_user_location_to_restaurants(restaurants, user_location):
+    if not user_location:
+        return restaurants.copy()
+
+    results = restaurants.copy()
+    if "original_distance" not in results.columns:
+        results["original_distance"] = results["distance"]
+
+    distances = []
+    walking_minutes = []
+    for _, row in results.iterrows():
+        distance_m = haversine_distance_meters(
+            user_location["latitude"],
+            user_location["longitude"],
+            row["latitude"],
+            row["longitude"],
+        )
+        distances.append(round(distance_m))
+        walking_minutes.append(max(1, round(distance_m / 80)))
+
+    results["distance_meters"] = distances
+    results["distance"] = walking_minutes
+    return results
+
+
 def get_daily_index(seed_text, total):
     if total <= 0:
         return 0
@@ -1418,7 +1487,7 @@ def get_cp_marker_color(cp_score, rank):
     return "blue"
 
 
-def render_restaurant_map(result):
+def render_restaurant_map(result, user_location=None):
     st.subheader("推薦餐廳地圖")
     map_data = result.dropna(subset=["latitude", "longitude"])
     if map_data.empty:
@@ -1426,8 +1495,19 @@ def render_restaurant_map(result):
         return
 
     st.caption("圖針顏色：紅色＝本次第一名｜綠色＝高 CP 值｜橘色＝中高 CP 值｜藍色＝一般推薦")
-    center = [map_data["latitude"].mean(), map_data["longitude"].mean()]
+    if user_location:
+        center = [user_location["latitude"], user_location["longitude"]]
+    else:
+        center = [map_data["latitude"].mean(), map_data["longitude"].mean()]
     restaurant_map = folium.Map(location=center, zoom_start=16, control_scale=True)
+
+    if user_location:
+        folium.Marker(
+            location=[user_location["latitude"], user_location["longitude"]],
+            tooltip=f"目前位置：{user_location['source']}",
+            popup=folium.Popup("系統用這個位置重新計算餐廳步行距離。", max_width=260),
+            icon=folium.Icon(color="purple", icon="user", prefix="fa"),
+        ).add_to(restaurant_map)
 
     for rank, (_, row) in enumerate(map_data.iterrows(), start=1):
         cp_score = float(row["cp_score"])
@@ -1436,7 +1516,8 @@ def render_restaurant_map(result):
         類型：{html.escape(str(row['category']))}<br>
         平均價格：{row['price']} 元<br>
         評分：{row['rating']}<br>
-        距離：{row['distance']} 分鐘<br>
+        步行距離：{row['distance']} 分鐘<br>
+        直線距離：{row.get('distance_meters', '無資料')} 公尺<br>
         推薦分數：{row['score']}<br>
         CP值：{cp_score:.2f}<br>
         評論情緒：{row.get('sentiment_score', '無資料')}<br>
@@ -1446,7 +1527,7 @@ def render_restaurant_map(result):
         marker_color = get_cp_marker_color(cp_score, rank)
         folium.Marker(
             location=[row["latitude"], row["longitude"]],
-            tooltip=f"{rank}. {row['name']}｜推薦 {row['score']} 分｜CP {cp_score:.1f}",
+            tooltip=f"{rank}. {row['name']}｜{row['distance']} 分鐘｜推薦 {row['score']} 分",
             popup=folium.Popup(popup_html, max_width=320),
             icon=folium.Icon(color=marker_color, icon="cutlery", prefix="fa"),
         ).add_to(restaurant_map)
@@ -2010,6 +2091,31 @@ if mode == "我要外食":
         max_negative_ratio = st.slider("可接受負評比例", 0, 100, 60, step=5)
         hide_high_risk = st.checkbox("隱藏高風險評論餐廳")
 
+    with st.sidebar.expander("定位與距離", expanded=True):
+        location_mode = st.radio("定位方式", ["瀏覽器定位", "手動選擇據點"], horizontal=True)
+        user_location = None
+        if location_mode == "瀏覽器定位":
+            if get_geolocation is None:
+                st.warning("目前環境尚未安裝瀏覽器定位套件，已改用手動據點。")
+            else:
+                browser_location = normalize_browser_location(get_geolocation())
+                if browser_location:
+                    user_location = browser_location
+                    accuracy = user_location.get("accuracy")
+                    accuracy_text = "" if accuracy is None else f"｜誤差約 {accuracy:.0f} 公尺"
+                    st.success(
+                        f"已取得定位：{user_location['latitude']:.5f}, {user_location['longitude']:.5f}{accuracy_text}"
+                    )
+                else:
+                    st.info("請允許瀏覽器定位權限。若沒有跳出權限視窗，可改用手動選擇據點。")
+
+        if user_location is None:
+            preset_name = st.selectbox("手動據點", list(LOCATION_PRESETS.keys()))
+            user_location = {**LOCATION_PRESETS[preset_name], "source": preset_name, "accuracy": None}
+            st.caption(f"目前使用據點：{preset_name}")
+
+    df = apply_user_location_to_restaurants(df, user_location)
+
     candidate_result = recommend_restaurants(
         df,
         budget,
@@ -2057,6 +2163,11 @@ if mode == "我要外食":
         st.caption(f"自動時段：{meal_time}｜{get_meal_time_strategy(meal_time)}")
     elif meal_time != "不套用":
         st.caption(f"手動時段：{meal_time}｜{get_meal_time_strategy(meal_time)}")
+    if user_location:
+        st.caption(
+            f"距離計算基準：{user_location['source']}｜"
+            f"{user_location['latitude']:.5f}, {user_location['longitude']:.5f}"
+        )
     st.caption(
         f"排序方式：{sort_by}｜最低評分：{min_rating:.1f}｜顯示 {top_n} 筆｜"
         f"評論分析：{'啟用' if use_review_analysis else '未啟用'}"
@@ -2133,7 +2244,7 @@ if mode == "我要外食":
 
     st.divider()
     render_anchor("map")
-    render_restaurant_map(result)
+    render_restaurant_map(result, user_location)
 
     render_anchor("data")
     with st.expander("查看完整餐廳資料表", expanded=False):
