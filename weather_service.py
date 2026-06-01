@@ -15,10 +15,18 @@ RAIN_KEYWORDS = (
 )
 
 
-def classify_weather(temperature_c, description):
+def classify_weather(temperature_c, description, precipitation_mm=0):
     description_text = str(description or "").lower()
-    if any(keyword in description_text for keyword in RAIN_KEYWORDS):
+    try:
+        precipitation = float(precipitation_mm or 0)
+    except (TypeError, ValueError):
+        precipitation = 0
+
+    if precipitation >= 0.2:
         return "雨天"
+    if "nearby" not in description_text and "可能" not in description_text:
+        if any(keyword in description_text for keyword in RAIN_KEYWORDS):
+            return "雨天"
     if temperature_c is not None and temperature_c >= 29:
         return "熱"
     if temperature_c is not None and temperature_c <= 18:
@@ -26,8 +34,8 @@ def classify_weather(temperature_c, description):
     return "普通"
 
 
-def fetch_current_weather(location="Taichung", timeout=8):
-    city = str(location or "Taichung").strip() or "Taichung"
+def fetch_current_weather(location="Xitun District, Taichung, Taiwan", timeout=8):
+    city = str(location or "Xitun District, Taichung, Taiwan").strip() or "Xitun District, Taichung, Taiwan"
     url = f"https://wttr.in/{quote(city)}?format=j1"
     request = Request(url, headers={"User-Agent": "restaurant-recommender/1.0"})
 
@@ -40,6 +48,7 @@ def fetch_current_weather(location="Taichung", timeout=8):
             "location": city,
             "weather": "普通",
             "temperature_c": None,
+            "precipitation_mm": 0,
             "description": "",
             "source": "wttr.in",
             "error": str(error),
@@ -55,12 +64,17 @@ def fetch_current_weather(location="Taichung", timeout=8):
         temperature_c = float(current.get("temp_C"))
     except (TypeError, ValueError):
         temperature_c = None
+    try:
+        precipitation_mm = float(current.get("precipMM") or 0)
+    except (TypeError, ValueError):
+        precipitation_mm = 0
 
     return {
         "ok": True,
         "location": f"{area_name}, {country}".strip(", "),
-        "weather": classify_weather(temperature_c, description),
+        "weather": classify_weather(temperature_c, description, precipitation_mm),
         "temperature_c": temperature_c,
+        "precipitation_mm": precipitation_mm,
         "description": description,
         "source": "wttr.in",
         "error": "",

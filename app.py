@@ -2,6 +2,7 @@ import hashlib
 import html
 import math
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import folium
 import streamlit as st
@@ -876,7 +877,7 @@ def get_cached_weather(location):
 
 
 def detect_meal_time(current_time=None):
-    now = current_time or datetime.now()
+    now = current_time or datetime.now(ZoneInfo("Asia/Taipei"))
     minutes = now.hour * 60 + now.minute
     if 5 * 60 <= minutes < 10 * 60 + 30:
         return "早餐"
@@ -2056,13 +2057,18 @@ if mode == "我要外食":
             meal_time = st.selectbox("用餐時段", ["不套用", "早餐", "午餐", "下午茶", "晚餐", "宵夜"], index=3)
         weather_mode = st.radio("天氣來源", ["自動偵測", "手動選擇"], horizontal=True)
         if weather_mode == "自動偵測":
-            weather_location = st.text_input("所在地區", value="Taichung", help="可輸入 Taichung、Taipei、Feng Chia University 等地點。")
+            weather_location = st.text_input(
+                "所在地區",
+                value="Xitun District, Taichung, Taiwan",
+                help="建議輸入行政區，例如 Xitun District, Taichung, Taiwan，避免天氣服務解析到錯誤區域。",
+            )
             weather_info = get_cached_weather(weather_location)
             weather = weather_info["weather"]
             if weather_info["ok"]:
                 temp_text = "--" if weather_info["temperature_c"] is None else f"{weather_info['temperature_c']:.0f}°C"
+                rain_text = f"降雨 {weather_info.get('precipitation_mm', 0):.1f} mm"
                 st.success(
-                    f"自動判斷：{weather}｜{weather_info['location']}｜{temp_text}｜{weather_info['description']}"
+                    f"自動判斷：{weather}｜{weather_info['location']}｜{temp_text}｜{rain_text}｜{weather_info['description']}"
                 )
             else:
                 st.warning("天氣自動偵測失敗，已暫時使用普通天氣。可改用手動選擇。")
@@ -2073,6 +2079,7 @@ if mode == "我要外食":
                 "location": "手動選擇",
                 "weather": "普通",
                 "temperature_c": None,
+                "precipitation_mm": 0,
                 "description": "",
                 "source": "manual",
                 "error": "",
