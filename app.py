@@ -876,6 +876,10 @@ if "restaurant_decision" not in st.session_state:
     st.session_state.restaurant_decision = None
 if "recipe_decision" not in st.session_state:
     st.session_state.recipe_decision = None
+if "restaurant_feedback" not in st.session_state:
+    st.session_state.restaurant_feedback = {"liked": [], "disliked": []}
+if "recipe_feedback" not in st.session_state:
+    st.session_state.recipe_feedback = {"liked": [], "disliked": []}
 
 
 render_sidebar_nav(mode)
@@ -885,6 +889,23 @@ def add_favorite(kind, name):
     key = "favorite_restaurants" if kind == "restaurant" else "favorite_recipes"
     if name not in st.session_state[key]:
         st.session_state[key].append(name)
+
+
+def record_feedback(kind, name, preference):
+    feedback_key = "restaurant_feedback" if kind == "restaurant" else "recipe_feedback"
+    target_key = "liked" if preference == "like" else "disliked"
+    opposite_key = "disliked" if preference == "like" else "liked"
+    if name not in st.session_state[feedback_key][target_key]:
+        st.session_state[feedback_key][target_key].append(name)
+    if name in st.session_state[feedback_key][opposite_key]:
+        st.session_state[feedback_key][opposite_key].remove(name)
+
+
+def clear_feedback(kind=None):
+    if kind in (None, "restaurant"):
+        st.session_state.restaurant_feedback = {"liked": [], "disliked": []}
+    if kind in (None, "recipe"):
+        st.session_state.recipe_feedback = {"liked": [], "disliked": []}
 
 
 def render_favorites():
@@ -903,6 +924,24 @@ def render_favorites():
             if st.button("清空收藏"):
                 st.session_state.favorite_restaurants = []
                 st.session_state.favorite_recipes = []
+                st.rerun()
+        liked_restaurants = st.session_state.restaurant_feedback["liked"]
+        disliked_restaurants = st.session_state.restaurant_feedback["disliked"]
+        liked_recipes = st.session_state.recipe_feedback["liked"]
+        disliked_recipes = st.session_state.recipe_feedback["disliked"]
+        if liked_restaurants or disliked_restaurants or liked_recipes or disliked_recipes:
+            st.divider()
+            st.write("偏好學習")
+            if liked_restaurants:
+                st.caption(f"喜歡餐廳：{'、'.join(liked_restaurants[:4])}")
+            if disliked_restaurants:
+                st.caption(f"不喜歡餐廳：{'、'.join(disliked_restaurants[:4])}")
+            if liked_recipes:
+                st.caption(f"喜歡食譜：{'、'.join(liked_recipes[:4])}")
+            if disliked_recipes:
+                st.caption(f"不喜歡食譜：{'、'.join(disliked_recipes[:4])}")
+            if st.button("清除偏好學習"):
+                clear_feedback()
                 st.rerun()
 
 
@@ -1149,6 +1188,162 @@ def apply_review_adjustment(result, use_review_analysis, review_weight):
         by=["final_score", "sentiment_score", "score", "rating"],
         ascending=[False, False, False, False],
     )
+
+
+def price_bucket(price):
+    if price <= 100:
+        return "低價"
+    if price <= 180:
+        return "中價"
+    return "高價"
+
+
+def time_bucket(minutes):
+    if minutes <= 15:
+        return "快速"
+    if minutes <= 30:
+        return "一般"
+    return "較久"
+
+
+def calorie_bucket(calories):
+    if calories <= 450:
+        return "低熱量"
+    if calories <= 650:
+        return "中熱量"
+    return "高熱量"
+
+
+def build_restaurant_preference_profile(all_restaurants):
+    feedback = st.session_state.restaurant_feedback
+    if not feedback["liked"] and not feedback["disliked"]:
+        return {}
+
+    profile = {}
+
+    def add_weight(feature, weight):
+        profile[feature] = profile.get(feature, 0) + weight
+
+    for preference, names in (("liked", feedback["liked"]), ("disliked", feedback["disliked"])):
+        weight = 1 if preference == "liked" else -1
+        matches = all_restaurants[all_restaurants["name"].isin(names)]
+        for _, row in matches.iterrows():
+            add_weight(("category", row["category"]), weight * 5)
+            add_weight(("price_bucket", price_bucket(row["price"])), weight * 3)
+            add_weight(("serve_speed", row["serve_speed"]), weight * 2)
+            add_weight(("takeout", row["takeout"]), weight * 1.5)
+            add_weight(("spicy_level", min(int(row["spicy_level"]), 3)), weight * 1)
+            if "review_risk" in row:
+                add_weight(("review_risk", row["review_risk"]), weight * 2)
+    return profile
+
+
+def apply_restaurant_preference_learning(result, all_restaurants):
+    result = result.copy()
+    profile = build_restaurant_preference_profile(all_restaurants)
+    if result.empty or not profile:
+        result["preference_adjustment"] = 0
+        return result
+
+    adjustments = []
+    for _, row in result.iterrows():
+        adjustment = 0
+        adjustment += profile.get(("category", row["category"]), 0)
+        adjustment += profile.get(("price_bucket", price_bucket(row["price"])), 0)
+        adjustment += profile.get(("serve_speed", row["serve_speed"]), 0)
+        adjustment += profile.get(("takeout", row["takeout"]), 0)
+        adjustment += profile.get(("spicy_level", min(int(row["spicy_level"]), 3)), 0)
+        adjustment += profile.get(("review_risk", row.get("review_risk", "未知")), 0)
+        adjustments.append(round(max(min(adjustment, 12), -12), 1))
+
+    score_column = "final_score" if "final_score" in result.columns else "score"
+    result["preference_adjustment"] = adjustments
+    result["final_score"] = (result[score_column] + result["preference_adjustment"]).clip(0, 125).round(1)
+    sort_columns = ["final_score", "preference_adjustment", "score", "rating"]
+    return result.sort_values(by=sort_columns, ascending=[False, False, False, False])
+
+
+def build_recipe_preference_profile(all_recipes):
+    feedback = st.session_state.recipe_feedback
+    if not feedback["liked"] and not feedback["disliked"]:
+        return {}
+
+    profile = {}
+
+    def add_weight(feature, weight):
+        profile[feature] = profile.get(feature, 0) + weight
+
+    for preference, names in (("liked", feedback["liked"]), ("disliked", feedback["disliked"])):
+        weight = 1 if preference == "liked" else -1
+        matches = all_recipes[all_recipes["name"].isin(names)]
+        for _, row in matches.iterrows():
+            add_weight(("category", row["category"]), weight * 5)
+            add_weight(("difficulty", row["difficulty"]), weight * 2)
+            add_weight(("time_bucket", time_bucket(row["time"])), weight * 3)
+            add_weight(("calorie_bucket", calorie_bucket(row["calories"])), weight * 2)
+            for ingredient in parse_ingredients(row.get("ingredients", "")):
+                add_weight(("ingredient", ingredient), weight * 1.5)
+    return profile
+
+
+def apply_recipe_preference_learning(result, all_recipes):
+    result = result.copy()
+    profile = build_recipe_preference_profile(all_recipes)
+    if result.empty or not profile:
+        result["preference_adjustment"] = 0
+        return result
+
+    adjustments = []
+    for _, row in result.iterrows():
+        adjustment = 0
+        adjustment += profile.get(("category", row["category"]), 0)
+        adjustment += profile.get(("difficulty", row["difficulty"]), 0)
+        adjustment += profile.get(("time_bucket", time_bucket(row["time"])), 0)
+        adjustment += profile.get(("calorie_bucket", calorie_bucket(row["calories"])), 0)
+        for ingredient in parse_ingredients(row.get("ingredients", "")):
+            adjustment += profile.get(("ingredient", ingredient), 0)
+        adjustments.append(round(max(min(adjustment, 12), -12), 1))
+
+    score_column = "final_score" if "final_score" in result.columns else "score"
+    result["preference_adjustment"] = adjustments
+    result["final_score"] = (result[score_column] + result["preference_adjustment"]).clip(0, 140).round(1)
+    return result.sort_values(by=["final_score", "preference_adjustment", "score"], ascending=[False, False, False])
+
+
+def summarize_preference_profile(profile):
+    if not profile:
+        return "尚未累積偏好。對推薦卡片按喜歡或不喜歡後，系統會自動調整相似項目的分數。"
+    strongest = sorted(profile.items(), key=lambda item: abs(item[1]), reverse=True)[:4]
+    pieces = []
+    for (kind, value), weight in strongest:
+        direction = "偏好" if weight > 0 else "避開"
+        pieces.append(f"{direction}{value}")
+    return "、".join(pieces)
+
+
+def render_preference_learning_summary(kind, source_data):
+    if kind == "restaurant":
+        feedback = st.session_state.restaurant_feedback
+        profile = build_restaurant_preference_profile(source_data)
+        title = "外食偏好學習"
+    else:
+        feedback = st.session_state.recipe_feedback
+        profile = build_recipe_preference_profile(source_data)
+        title = "內食偏好學習"
+
+    liked_count = len(feedback["liked"])
+    disliked_count = len(feedback["disliked"])
+    with st.expander(title, expanded=bool(liked_count or disliked_count)):
+        st.caption("使用者按喜歡或不喜歡後，系統會把回饋轉成輕量化偏好權重，影響本次 session 後續排序。")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("喜歡", liked_count)
+        col2.metric("不喜歡", disliked_count)
+        col3.metric("偏好特徵數", len(profile))
+        st.write(summarize_preference_profile(profile))
+        if liked_count or disliked_count:
+            if st.button(f"清除{title}", key=f"clear_{kind}_preference_panel"):
+                clear_feedback(kind)
+                st.rerun()
 
 
 def render_review_analysis_panel(result):
@@ -1486,7 +1681,7 @@ def get_recipe_tags(row):
 
 def render_restaurant_card(rank, row):
     with st.container(border=True):
-        title_col, action_col, score_col = st.columns([3.5, 1, 1])
+        title_col, action_col, feedback_col, score_col = st.columns([3.2, 1, 1.3, 1])
         with title_col:
             render_ranked_title(rank, row["name"])
         if row["name"] in st.session_state.favorite_restaurants:
@@ -1494,7 +1689,18 @@ def render_restaurant_card(rank, row):
         elif action_col.button("收藏", key=f"restaurant_fav_{rank}_{row['name']}"):
             add_favorite("restaurant", row["name"])
             st.rerun()
+        liked = row["name"] in st.session_state.restaurant_feedback["liked"]
+        disliked = row["name"] in st.session_state.restaurant_feedback["disliked"]
+        like_col, dislike_col = feedback_col.columns(2)
+        if like_col.button("喜歡", key=f"restaurant_like_{rank}_{row['name']}", disabled=liked):
+            record_feedback("restaurant", row["name"], "like")
+            st.rerun()
+        if dislike_col.button("不喜歡", key=f"restaurant_dislike_{rank}_{row['name']}", disabled=disliked):
+            record_feedback("restaurant", row["name"], "dislike")
+            st.rerun()
         score_col.metric("推薦分數", f"{row.get('final_score', row['score'])}")
+        if row.get("preference_adjustment", 0) != 0:
+            score_col.caption(f"偏好調整 {row['preference_adjustment']:+.1f}")
         if row.get("review_adjustment", 0) != 0:
             score_col.caption(f"評論調整 {row['review_adjustment']:+.1f}")
         render_tags(get_restaurant_tags(row))
@@ -2454,7 +2660,7 @@ def render_recipe_model_evaluation(baseline_result, enhanced_result, top_n, prio
 
 def render_recipe_card(rank, row):
     with st.container(border=True):
-        title_col, action_col, score_col = st.columns([3.5, 1, 1])
+        title_col, action_col, feedback_col, score_col = st.columns([3.2, 1, 1.3, 1])
         with title_col:
             render_ranked_title(rank, row["name"])
         if row["name"] in st.session_state.favorite_recipes:
@@ -2462,7 +2668,18 @@ def render_recipe_card(rank, row):
         elif action_col.button("收藏", key=f"recipe_fav_{rank}_{row['name']}"):
             add_favorite("recipe", row["name"])
             st.rerun()
+        liked = row["name"] in st.session_state.recipe_feedback["liked"]
+        disliked = row["name"] in st.session_state.recipe_feedback["disliked"]
+        like_col, dislike_col = feedback_col.columns(2)
+        if like_col.button("喜歡", key=f"recipe_like_{rank}_{row['name']}", disabled=liked):
+            record_feedback("recipe", row["name"], "like")
+            st.rerun()
+        if dislike_col.button("不喜歡", key=f"recipe_dislike_{rank}_{row['name']}", disabled=disliked):
+            record_feedback("recipe", row["name"], "dislike")
+            st.rerun()
         score_col.metric("推薦分數", f"{row['final_score']}")
+        if row.get("preference_adjustment", 0) != 0:
+            score_col.caption(f"偏好調整 {row['preference_adjustment']:+.1f}")
         if row.get("priority_bonus", 0) > 0:
             score_col.caption(f"含食材優先加權 +{row['priority_bonus']}")
         render_tags(get_recipe_tags(row))
@@ -2694,13 +2911,15 @@ if mode == "我要外食":
     evaluation_baseline = merge_review_analysis(candidate_result, review_analysis)
     evaluation_baseline["final_score"] = evaluation_baseline["score"]
     evaluation_enhanced = apply_review_adjustment(evaluation_baseline, True, review_weight)
+    preference_source = merge_review_analysis(df, review_analysis)
 
     result = evaluation_baseline.copy()
     if use_review_analysis:
         result = result[result["negative_ratio"] <= max_negative_ratio]
         if hide_high_risk:
             result = result[result["review_risk"] != "高"]
-    result = apply_review_adjustment(result, use_review_analysis, review_weight).head(top_n)
+    result = apply_review_adjustment(result, use_review_analysis, review_weight)
+    result = apply_restaurant_preference_learning(result, preference_source).head(top_n)
 
     render_anchor("overview")
     render_section_kicker("外食決策")
@@ -2709,6 +2928,7 @@ if mode == "我要外食":
         unsafe_allow_html=True,
     )
     render_restaurant_decision_summary(result, smart_mode, weather, meal_time, use_review_analysis)
+    render_preference_learning_summary("restaurant", preference_source)
 
     if st.session_state.restaurant_decision is not None:
         current_names = set(result["name"].tolist())
@@ -2905,7 +3125,8 @@ else:
         max_missing,
         only_cookable,
     )
-    result = apply_ingredient_priority_to_recipes(candidate_result, priority_profiles).head(top_n)
+    result = apply_ingredient_priority_to_recipes(candidate_result, priority_profiles)
+    result = apply_recipe_preference_learning(result, recipes).head(top_n)
     evaluation_baseline = candidate_result.copy()
     evaluation_enhanced = apply_ingredient_priority_to_recipes(candidate_result, priority_profiles)
 
@@ -2921,6 +3142,7 @@ else:
         unsafe_allow_html=True,
     )
     render_recipe_decision_summary(result, recipe_smart_mode, current_ingredients)
+    render_preference_learning_summary("recipe", recipes)
 
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
     summary_col1.metric("本次推薦筆數", len(result))
