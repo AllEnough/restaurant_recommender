@@ -1150,6 +1150,15 @@ def apply_user_location_to_restaurants(restaurants, user_location):
     return results
 
 
+def format_takeout(value):
+    mapping = {
+        "yes": "可外帶",
+        "no": "不支援外帶",
+        "不限": "不限",
+    }
+    return mapping.get(str(value), str(value))
+
+
 def get_daily_index(seed_text, total):
     if total <= 0:
         return 0
@@ -1489,10 +1498,16 @@ def render_review_analysis_panel(result):
 
         safest = review_data.sort_values(by=["review_risk", "sentiment_score"], ascending=[True, False]).iloc[0]
         risky = review_data.sort_values(by=["negative_ratio", "sentiment_score"], ascending=[False, True]).iloc[0]
-        st.info(
-            f"評論最穩定：{safest['name']}（情緒 {safest['sentiment_score']}，負評 {safest['negative_ratio']}%）；"
-            f"需注意：{risky['name']}（負評 {risky['negative_ratio']}%）。"
-        )
+        if risky["negative_ratio"] < 10 and high_risk_count == 0:
+            st.info(
+                f"評論最穩定：{safest['name']}（情緒 {safest['sentiment_score']}，負評 {safest['negative_ratio']}%）；"
+                "本次推薦餐廳評論風險皆偏低。"
+            )
+        else:
+            st.info(
+                f"評論最穩定：{safest['name']}（情緒 {safest['sentiment_score']}，負評 {safest['negative_ratio']}%）；"
+                f"需注意：{risky['name']}（負評 {risky['negative_ratio']}%）。"
+            )
 
         risk_classes = {"高": "risk-badge--high", "中": "risk-badge--mid", "低": ""}
         table_rows = []
@@ -1656,7 +1671,7 @@ def render_restaurant_sensitivity_analysis(result):
         changed = [row for row in rows[1:] if row["第一名"] != current_winner]
         if changed:
             changed_text = "、".join(f"{row['情境']}會改成 {row['第一名']}" for row in changed[:3])
-            st.warning(f"排名對使用者偏好有敏感度：{changed_text}。")
+            st.info(f"排名對使用者偏好有敏感度：{changed_text}。")
         else:
             st.success("不同情境下第一名大致穩定，代表目前推薦結果相對穩健。")
 
@@ -1833,7 +1848,7 @@ def render_restaurant_card(rank, row):
         info_col3.write(f"出餐速度：{row['serve_speed']}")
         info_col3.write(f"辣度：{row['spicy_level']} / 5")
         info_col4.write(f"CP 值：{row['cp_score']}")
-        info_col4.write(f"外帶：{row['takeout']}")
+        info_col4.write(f"外帶：{format_takeout(row['takeout'])}")
         if "sentiment_score" in row:
             info_col4.write(f"評論情緒：{row['sentiment_score']}")
             info_col4.write(f"負評比例：{row['negative_ratio']}%")
@@ -1950,7 +1965,7 @@ def render_restaurant_comparison(result):
             {"比較項目": "評分", left_name: str(left["rating"]), right_name: str(right["rating"])},
             {"比較項目": "CP 值", left_name: str(left["cp_score"]), right_name: str(right["cp_score"])},
             {"比較項目": "出餐速度", left_name: str(left["serve_speed"]), right_name: str(right["serve_speed"])},
-            {"比較項目": "外帶", left_name: str(left["takeout"]), right_name: str(right["takeout"])},
+            {"比較項目": "外帶", left_name: format_takeout(left["takeout"]), right_name: format_takeout(right["takeout"])},
         ]
         st.dataframe(comparison_rows, hide_index=True, width="stretch")
 
@@ -2198,6 +2213,7 @@ RESTAURANT_DEMO_CASES = {
         "overrides": {
             "budget": 120,
             "distance": 10,
+            "weather_mode": "手動選擇",
             "meal_time_mode": "手動選擇",
             "manual_meal_time": "午餐",
             "sort_by": "CP值優先",
@@ -2211,6 +2227,9 @@ RESTAURANT_DEMO_CASES = {
         "overrides": {
             "budget": 160,
             "distance": 7,
+            "weather_mode": "手動選擇",
+            "meal_time_mode": "手動選擇",
+            "manual_meal_time": "午餐",
             "need_takeout": "yes",
             "prefer_fast": True,
             "sort_by": "距離最近",
@@ -2219,15 +2238,18 @@ RESTAURANT_DEMO_CASES = {
         },
     },
     "老師聚餐不踩雷": {
-        "description": "展示評論分析價值，優先低負評、高評分與風險控管。",
+        "description": "展示評論分析價值，優先聚餐友善類型、高評分與低評論風險。",
         "smart_mode": "不想踩雷",
         "overrides": {
             "budget": 240,
             "distance": 14,
+            "category": "不限",
+            "required_categories": ["日式", "義式", "火鍋", "鐵板燒", "美式", "韓式", "泰式", "港式"],
+            "weather_mode": "手動選擇",
             "sort_by": "評分最高",
             "min_rating": 4.0,
             "review_weight": 90,
-            "max_negative_ratio": 25,
+            "max_negative_ratio": 40,
             "hide_high_risk": True,
         },
     },
@@ -2246,7 +2268,7 @@ RECIPE_DEMO_CASES = {
         "smart_mode": "我不想出門",
         "custom_ingredients": "",
         "overrides": {
-            "default_ingredients": ["雞蛋", "白飯", "蔥"],
+            "default_ingredients": ["雞蛋", "白飯", "蔥", "醬油"],
             "max_missing": 0,
             "only_cookable": True,
             "max_time": 25,
@@ -2398,7 +2420,7 @@ def render_restaurant_decision_summary(result, smart_mode, weather, meal_time, u
         if use_review_analysis
         else "尚未納入評論風險"
     )
-    takeout_text = "可外帶" if best.get("takeout") == "yes" else "以內用為主"
+    takeout_text = format_takeout(best.get("takeout", "不限"))
     st.markdown(
         "<div class='insight-panel decision-hero'>"
         "<div class='insight-panel__title'>本次最佳建議</div>"
@@ -3024,6 +3046,7 @@ if mode == "我要外食":
             "是否需要外帶",
             takeout_options,
             index=index_of(takeout_options, restaurant_profile["need_takeout"]),
+            format_func=format_takeout,
             key=f"restaurant_takeout_{restaurant_context_key}",
         )
         max_spicy_level = st.slider(
@@ -3113,9 +3136,14 @@ if mode == "我要外食":
             st.caption(f"目前使用據點：{preset_name}")
 
     df = apply_user_location_to_restaurants(df, user_location)
+    recommendation_df = df
+    required_categories = restaurant_profile.get("required_categories", [])
+    if required_categories:
+        recommendation_df = recommendation_df[recommendation_df["category"].isin(required_categories)]
+        st.sidebar.caption(f"展示案例鎖定類型：{'、'.join(required_categories)}")
 
     candidate_result = recommend_restaurants(
-        df,
+        recommendation_df,
         budget,
         max_distance,
         category,
@@ -3132,7 +3160,7 @@ if mode == "我要外食":
     evaluation_baseline = merge_review_analysis(candidate_result, review_analysis)
     evaluation_baseline["final_score"] = evaluation_baseline["score"]
     evaluation_enhanced = apply_review_adjustment(evaluation_baseline, True, review_weight)
-    preference_source = merge_review_analysis(df, review_analysis)
+    preference_source = merge_review_analysis(recommendation_df, review_analysis)
 
     result = evaluation_baseline.copy()
     if use_review_analysis:
