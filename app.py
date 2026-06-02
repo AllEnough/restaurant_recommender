@@ -1319,6 +1319,55 @@ def apply_review_adjustment(result, use_review_analysis, review_weight):
     )
 
 
+def apply_restaurant_intent_adjustment(result, intent_name):
+    result = result.copy()
+    if result.empty:
+        result["intent_adjustment"] = 0
+        return result
+
+    adjustments = []
+    for _, row in result.iterrows():
+        adjustment = 0
+        if intent_name in ("省錢外食", "大學生省錢午餐"):
+            adjustment += min(float(row.get("cp_score", 0)) / 10, 10)
+            adjustment += max(0, (140 - float(row["price"])) / 20)
+            if row["category"] in ["便當", "飯類", "麵食", "水餃", "鍋貼", "素食"]:
+                adjustment += 3
+            if row["category"] in ["飲料", "甜點", "早餐"]:
+                adjustment -= 8
+        elif intent_name in ("快速午餐", "疲累近距離", "上班族快速外帶"):
+            adjustment += max(0, (10 - float(row["distance"])) * 1.6)
+            if row["serve_speed"] == "快":
+                adjustment += 7
+            elif row["serve_speed"] == "中":
+                adjustment += 3
+            if row["takeout"] == "yes":
+                adjustment += 5
+            if row["category"] in ["便當", "飯類", "麵食", "水餃", "鍋貼", "輕食"]:
+                adjustment += 3
+            if row["category"] in ["飲料", "甜點", "早餐"]:
+                adjustment -= 8
+        elif intent_name in ("不想踩雷", "老師聚餐不踩雷"):
+            adjustment += max(0, (float(row["rating"]) - 4.0) * 10)
+            adjustment += max(0, (40 - float(row.get("negative_ratio", 40))) / 4)
+            adjustment += max(0, (float(row.get("sentiment_score", 60)) - 60) / 8)
+            if row.get("review_risk") == "低":
+                adjustment += 5
+            elif row.get("review_risk") == "高":
+                adjustment -= 8
+            if row["category"] in ["日式", "義式", "火鍋", "鐵板燒", "美式", "韓式", "泰式", "港式"]:
+                adjustment += 4
+        adjustments.append(round(max(min(adjustment, 18), -12), 1))
+
+    score_column = "final_score" if "final_score" in result.columns else "score"
+    result["intent_adjustment"] = adjustments
+    result["final_score"] = (result[score_column] + result["intent_adjustment"]).clip(0, 135).round(1)
+    return result.sort_values(
+        by=["final_score", "intent_adjustment", "score", "rating"],
+        ascending=[False, False, False, False],
+    )
+
+
 def price_bucket(price):
     if price <= 100:
         return "低價"
@@ -1836,6 +1885,8 @@ def render_restaurant_card(rank, row):
         score_col.metric("推薦分數", f"{row.get('final_score', row['score'])}")
         if row.get("preference_adjustment", 0) != 0:
             score_col.caption(f"偏好調整 {row['preference_adjustment']:+.1f}")
+        if row.get("intent_adjustment", 0) != 0:
+            score_col.caption(f"情境調整 {row['intent_adjustment']:+.1f}")
         if row.get("review_adjustment", 0) != 0:
             score_col.caption(f"評論調整 {row['review_adjustment']:+.1f}")
         render_tags(get_restaurant_tags(row))
@@ -2213,6 +2264,7 @@ RESTAURANT_DEMO_CASES = {
         "overrides": {
             "budget": 120,
             "distance": 10,
+            "required_categories": ["便當", "飯類", "麵食", "水餃", "鍋貼", "小吃", "素食"],
             "weather_mode": "手動選擇",
             "meal_time_mode": "手動選擇",
             "manual_meal_time": "午餐",
@@ -2227,6 +2279,7 @@ RESTAURANT_DEMO_CASES = {
         "overrides": {
             "budget": 160,
             "distance": 7,
+            "required_categories": ["便當", "飯類", "麵食", "水餃", "鍋貼", "輕食"],
             "weather_mode": "手動選擇",
             "meal_time_mode": "手動選擇",
             "manual_meal_time": "午餐",
@@ -3168,6 +3221,7 @@ if mode == "我要外食":
         if hide_high_risk:
             result = result[result["review_risk"] != "高"]
     result = apply_review_adjustment(result, use_review_analysis, review_weight)
+    result = apply_restaurant_intent_adjustment(result, restaurant_demo_case if restaurant_demo_case != "手動自訂" else smart_mode)
     result = apply_restaurant_preference_learning(result, preference_source).head(top_n)
 
     render_anchor("demo")
