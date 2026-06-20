@@ -106,6 +106,113 @@ function RecipeCard({ row, rank, saved, onSave, canSave }) {
   </article>;
 }
 
+function RankChange({ value }) {
+  const number = Number(value || 0);
+  const color = number > 0 ? "text-leaf" : number < 0 ? "text-coral" : "text-muted";
+  return <span className={`font-black ${color}`}>{number > 0 ? `↑ ${number}` : number < 0 ? `↓ ${Math.abs(number)}` : "－"}</span>;
+}
+
+function ScoreBar({ label, value, max = 135, tone = "coral" }) {
+  const width = Math.max(0, Math.min(Number(value || 0) / max * 100, 100));
+  return <div className="grid grid-cols-[88px_minmax(0,1fr)_44px] items-center gap-2 text-xs">
+    <span className="font-bold text-muted">{label}</span>
+    <div className="h-2 overflow-hidden rounded bg-[#ece9e1]"><div className={`h-full ${tone === "green" ? "bg-leaf" : tone === "muted" ? "bg-sun" : "bg-coral"}`} style={{ width: `${width}%` }}/></div>
+    <span className="text-right font-black">{value}</span>
+  </div>;
+}
+
+function RestaurantAdvanced({ data }) {
+  const analysis = data?.analysis;
+  if (!analysis) return null;
+  const dashboard = analysis.dashboard || {};
+  const evaluation = analysis.evaluation || {};
+  return <div className="mt-5 grid gap-6">
+    <section>
+      <h3 className="text-base font-black">外食決策 Dashboard</h3>
+      <p className="mt-1 text-sm text-muted">整理目前候選池、評論風險與增強模型輸出。</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Metric label="通過條件候選" value={dashboard.candidate_count ?? 0}/>
+        <Metric label="Top 平均最終分" value={dashboard.average_final_score ?? 0} tone="green"/>
+        <Metric label="Top 平均負評" value={`${dashboard.average_negative_ratio ?? 0}%`} tone="orange"/>
+        <Metric label="低風險餐廳" value={`${dashboard.low_risk_count ?? 0} 間`} tone="green"/>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 text-sm">{Object.entries(analysis.risk_distribution || {}).map(([risk,count]) => <span key={risk} className="rounded border border-line bg-canvas px-3 py-1.5 font-bold">{risk}風險 {count}</span>)}</div>
+    </section>
+
+    <section className="border-t border-line pt-5">
+      <h3 className="text-base font-black">模型評估：基礎排序 vs 評論與情境增強</h3>
+      <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Metric label="Top 清單重疊率" value={`${evaluation.top_overlap ?? 0}%`}/>
+        <Metric label="基礎平均負評" value={`${evaluation.baseline_average_negative ?? 0}%`}/>
+        <Metric label="增強後平均負評" value={`${evaluation.enhanced_average_negative ?? 0}%`} tone="green"/>
+        <Metric label="第一名是否改變" value={evaluation.first_changed ? "有改變" : "維持一致"} tone={evaluation.first_changed ? "orange" : "green"}/>
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <table className="analysis-table"><thead><tr><th>餐廳</th><th>基礎排名</th><th>增強排名</th><th>名次變化</th><th>基礎分</th><th>最終分</th><th>負評</th></tr></thead><tbody>{(evaluation.comparison || []).map((row) => <tr key={row.name}><td className="font-bold">{row.name}</td><td>{row.baseline_rank ?? "－"}</td><td>{row.enhanced_rank ?? "－"}</td><td><RankChange value={row.rank_change}/></td><td>{row.base_score}</td><td className="font-black text-coral">{row.final_score}</td><td>{row.negative_ratio}%</td></tr>)}</tbody></table>
+      </div>
+    </section>
+
+    <section className="border-t border-line pt-5">
+      <h3 className="text-base font-black">推薦分數拆解</h3>
+      <div className="mt-3 grid gap-4 lg:grid-cols-2">{(analysis.score_breakdown || []).map((row) => <div key={row.name} className="border-b border-line pb-4">
+        <div className="mb-2 flex items-center justify-between"><span className="font-black">{row.name}</span><span className="text-lg font-black text-coral">{row.final_score}</span></div>
+        <div className="grid gap-2"><ScoreBar label="基礎分數" value={row.base_score}/><ScoreBar label="評論調整" value={row.review_adjustment} max={18} tone="green"/><ScoreBar label="情境調整" value={row.intent_adjustment} max={18} tone="muted"/></div>
+      </div>)}</div>
+    </section>
+
+    <section className="border-t border-line pt-5">
+      <h3 className="text-base font-black">權重敏感度分析</h3>
+      <p className="mt-1 text-sm text-muted">使用相同候選池，觀察不同決策目標下的第一名。</p>
+      <div className="mt-3 overflow-x-auto"><table className="analysis-table"><thead><tr><th>排序策略</th><th>第一名</th><th>指標值</th></tr></thead><tbody>{(analysis.sensitivity || []).map((row) => <tr key={row.strategy}><td>{row.strategy}</td><td className="font-black">{row.winner}</td><td>{row.value}</td></tr>)}</tbody></table></div>
+    </section>
+  </div>;
+}
+
+function RecipeAdvanced({ data }) {
+  const analysis = data?.analysis;
+  if (!analysis) return null;
+  const dashboard = analysis.dashboard || {};
+  const evaluation = analysis.evaluation || {};
+  const coverage = analysis.knowledge_coverage || {};
+  return <div className="mt-5 grid gap-6">
+    <section>
+      <h3 className="text-base font-black">內食決策 Dashboard</h3>
+      <p className="mt-1 text-sm text-muted">同時檢查可料理性、缺料與保存加權。</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Metric label="通過條件候選" value={dashboard.candidate_count ?? 0}/>
+        <Metric label="可直接料理" value={`${dashboard.cookable_count ?? 0} 道`} tone="green"/>
+        <Metric label="Top 平均缺料" value={`${dashboard.average_missing_count ?? 0} 項`} tone="orange"/>
+        <Metric label="平均保存加權" value={`+${dashboard.average_priority_bonus ?? 0}`} tone="green"/>
+      </div>
+    </section>
+
+    <section className="border-t border-line pt-5">
+      <h3 className="text-base font-black">食材標準化與保存優先順序</h3>
+      <div className="mt-3 overflow-x-auto"><table className="analysis-table"><thead><tr><th>食材</th><th>優先分數</th><th>剩餘天數</th><th>排程比值</th><th>風險級別</th><th>估計價格</th></tr></thead><tbody>{(analysis.priorities || []).map((row) => <tr key={row.ingredient}><td className="font-black">{row.ingredient}</td><td>{row.priority_score}</td><td>{row.remaining_days}</td><td>{row.scheduling_ratio}</td><td><span className={`font-black ${row.level === "高" ? "text-coral" : row.level === "中" ? "text-sun" : "text-leaf"}`}>{row.level}</span></td><td>{row.price} 元</td></tr>)}</tbody></table></div>
+      <div className="mt-3 flex flex-wrap gap-2 text-sm">{(analysis.normalization || []).map((row,index) => <span key={`${row.original}-${index}`} className="rounded border border-line bg-canvas px-3 py-1.5"><b>{row.original}</b>{row.changed ? ` → ${row.normalized}` : "（已標準化）"}</span>)}</div>
+    </section>
+
+    <section className="border-t border-line pt-5">
+      <h3 className="text-base font-black">模型評估：基礎排序 vs 保存優先級</h3>
+      <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Metric label="Top 清單重疊率" value={`${evaluation.top_overlap ?? 0}%`}/>
+        <Metric label="基礎平均缺料" value={`${evaluation.baseline_average_missing ?? 0} 項`}/>
+        <Metric label="增強後平均缺料" value={`${evaluation.enhanced_average_missing ?? 0} 項`} tone="green"/>
+        <Metric label="高優先食材命中" value={`${evaluation.high_priority_usage ?? 0} 道`} tone="orange"/>
+      </div>
+      <div className="mt-4 overflow-x-auto"><table className="analysis-table"><thead><tr><th>食譜</th><th>基礎排名</th><th>增強排名</th><th>名次變化</th><th>基礎分</th><th>最終分</th><th>缺料</th></tr></thead><tbody>{(evaluation.comparison || []).map((row) => <tr key={row.name}><td className="font-bold">{row.name}</td><td>{row.baseline_rank ?? "－"}</td><td>{row.enhanced_rank ?? "－"}</td><td><RankChange value={row.rank_change}/></td><td>{row.base_score}</td><td className="font-black text-leaf">{row.final_score}</td><td>{row.missing_count}</td></tr>)}</tbody></table></div>
+    </section>
+
+    <section className="border-t border-line pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-base font-black">食譜分數拆解</h3><span className="text-sm font-bold text-leaf">可信內容 {coverage.covered ?? 0}/{coverage.total ?? 0}</span></div>
+      <div className="mt-3 grid gap-4 lg:grid-cols-2">{(analysis.score_breakdown || []).map((row) => <div key={row.name} className="border-b border-line pb-4">
+        <div className="mb-2 flex items-center justify-between"><span className="font-black">{row.name}</span><span className="text-lg font-black text-leaf">{row.final_score}</span></div>
+        <div className="grid gap-2"><ScoreBar label="食材符合" value={row.ingredient_score} max={50} tone="green"/><ScoreBar label="料理時間" value={row.time_score} max={20}/><ScoreBar label="料理難度" value={row.difficulty_score} max={20} tone="muted"/><ScoreBar label="熱量" value={row.calorie_score} max={10} tone="green"/><ScoreBar label="缺料扣分" value={row.missing_penalty} max={20}/><ScoreBar label="保存加權" value={row.priority_bonus} max={25} tone="green"/></div>
+      </div>)}</div>
+    </section>
+  </div>;
+}
+
 function AuthModal({ mode, setMode, form, setForm, error, busy, onSubmit, onClose }) {
   return <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" role="dialog" aria-modal="true">
     <div className="w-full max-w-md rounded-md bg-white p-5 shadow-2xl">
@@ -307,7 +414,7 @@ function App() {
 
           {!results ? <EmptyState mode={mode}/> : results.length === 0 ? <div className="rounded-md border border-coral/30 bg-[#fff0eb] p-5"><h3 className="font-black">目前條件沒有結果</h3><p className="mt-1 text-sm text-muted">放寬距離、評分或可缺少食材數後再試一次。</p></div> : <div className="grid gap-3">{results.map((row,index) => mode === "restaurant" ? <RestaurantCard key={row.name} row={row} rank={index+1} saved={isSaved("restaurant",row.name)} canSave={Boolean(user)} onSave={()=>toggleFavorite("restaurant",row.name)}/> : <RecipeCard key={row.name} row={row} rank={index+1} saved={isSaved("recipe",row.name)} canSave={Boolean(user)} onSave={()=>toggleFavorite("recipe",row.name)}/>)}</div>}
 
-          {results && <details className="mt-5 rounded-md border border-line bg-white p-4"><summary className="flex cursor-pointer items-center gap-2 font-black"><BarChart3 size={18}/>進階分析與模型資訊</summary><div className="mt-4 grid gap-3 sm:grid-cols-3"><Metric label="候選結果" value={mode === "restaurant" ? restaurantData?.meta?.candidate_count : recipeData?.meta?.result_count}/><Metric label="排序策略" value={mode === "restaurant" ? restaurantForm.smart_mode : "混合式推薦"}/><Metric label="可信內容覆蓋" value={mode === "recipe" ? `${results.filter((x)=>x.knowledge_status === "已檢索可信內容").length}/${results.length}` : "評論分析啟用"}/></div></details>}
+          {results && <section className="mt-5 rounded-md border border-line bg-white p-4"><div className="flex items-center gap-2 font-black"><BarChart3 size={18}/>進階分析與模型資訊</div>{mode === "restaurant" ? <RestaurantAdvanced data={restaurantData}/> : <RecipeAdvanced data={recipeData}/>}</section>}
         </section>
       </div>
     </main>

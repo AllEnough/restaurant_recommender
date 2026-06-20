@@ -164,7 +164,76 @@ CSV datasets / SQLite / ONNX models
 
 排序後以食譜名稱連接 `recipe_knowledge.csv`，取得 `knowledge_id`、料理步驟、來源名稱與審核日期。目前為 RAG-ready 的可信檢索層，尚未串接 LLM，不宣稱已完成完整生成式 RAG。
 
-## 八、登入與資料庫設計
+## 八、演算法範例程式
+
+為了在報告中清楚說明演算法，專案提供可獨立執行的簡化展示程式：
+
+```bash
+python3 report/algorithm_examples.py
+```
+
+完整程式位於 `report/algorithm_examples.py`，不需要啟動 React、FastAPI 或讀取 CSV，即可展示外食排名、食材優先順序與食譜混合排序。
+
+### 8.1 外食最終分數
+
+```python
+base_score = min(max(sum(parts.values()), 0), 100)
+
+review_adjustment = max(
+    min((sentiment_score - 50) * 0.16 - negative_ratio * 0.08, 10),
+    -12,
+)
+
+final_score = min(
+    max(base_score + review_adjustment * review_weight + intent_adjustment, 0),
+    135,
+)
+```
+
+講解順序：
+
+1. `parts` 是評分、價格、距離、類型、情境、外帶、辣度與速度。
+2. `review_adjustment` 將評論情緒與負評比例轉成 -12 至 10 的調整。
+3. `intent_adjustment` 代表省錢、快速或不踩雷情境。
+4. 三者相加後得到外食最終排名。
+
+### 8.2 食材使用優先級
+
+```python
+remaining_days = max(shelf_life - days_stored, 0)
+priority_score = min(
+    expiry_score + price_score + perishability_score,
+    100,
+)
+scheduling_ratio = waste_cost / (remaining_days + 1)
+```
+
+講解重點：剩餘天數放在分母，因此越接近過期，排程比值越高；價格與易腐程度代表食材被浪費時的成本。
+
+### 8.3 食譜混合排序
+
+```python
+base_score = (
+    ingredient_score
+    + time_score
+    + difficulty_score
+    + calorie_score
+    - missing_penalty
+)
+priority_bonus = min(used_priority / 8 + high_priority_count * 5, 25)
+final_score = min(max(base_score + priority_bonus, 0), 125)
+```
+
+講解重點：基礎分數回答「這道食譜適不適合」，保存加權回答「這道食譜現在是否應該先煮」。這也是本專題和一般食譜搜尋的主要差異。
+
+### 8.4 報告展示方式
+
+1. 先執行範例並顯示三組排序。
+2. 修改外食預算或評論負評比例，重新執行並觀察名次。
+3. 修改豆腐的已放天數，展示保存優先級如何影響食譜排序。
+4. 回到正式網站，指出推薦卡片中的基礎分數、評論調整與保存加權來自相同概念。
+
+## 九、登入與資料庫設計
 
 | 資料表 | 主要欄位 | 用途 |
 |---|---|---|
@@ -176,7 +245,7 @@ CSV datasets / SQLite / ONNX models
 - Session 原始 Token 只存於 HttpOnly Cookie，資料庫僅保存 SHA-256 雜湊。
 - Railway 使用 `/app/data` Volume 保存 SQLite。
 
-## 九、介面設計
+## 十、介面設計
 
 - React 19、Tailwind CSS 4、Vite 與 Lucide Icons。
 - 外食／內食以分段控制切換。
@@ -184,10 +253,13 @@ CSV datasets / SQLite / ONNX models
 - 評論、模型拆解與保存排程置於收合區塊。
 - 登入與相機使用 Modal，避免離開目前推薦情境。
 - 小螢幕切換成單欄排列。
+- 推薦清單後方固定顯示完整進階分析，不阻擋使用者先取得答案。
+- 外食顯示 Dashboard、模型前後比較、排名變化、分數拆解與權重敏感度。
+- 內食顯示 Dashboard、保存優先順序、食材標準化、模型比較、分數拆解與可信內容覆蓋。
 
-## 十、測試與驗證
+## 十一、測試與驗證
 
-### 10.1 自動測試
+### 11.1 自動測試
 
 - 食材別名標準化。
 - 食譜召回具有食材交集。
@@ -196,14 +268,14 @@ CSV datasets / SQLite / ONNX models
 - 註冊、登入、收藏、登出與 Session。
 - 無臉影像回傳正確錯誤。
 
-### 10.2 建置與部署驗證
+### 11.2 建置與部署驗證
 
 - React production build 成功。
 - FastAPI `/api/health` 回傳 HTTP 200。
 - FastAPI 能提供 React 首頁。
 - Railway 公開網站與 `/api/options` 回傳 HTTP 200。
 
-## 十一、研究成果
+## 十二、研究成果
 
 - 完成外食與內食兩條推薦流程。
 - 完成可解釋的多階段排序與推薦理由。
@@ -211,7 +283,7 @@ CSV datasets / SQLite / ONNX models
 - 完成真實帳號、Session 與收藏資料庫。
 - 完成 React/FastAPI/Docker/Railway 線上部署。
 
-## 十二、限制
+## 十三、限制
 
 - 專題 CSV 規模有限，評論並非即時 Google 全量資料。
 - 規則式評論分析無法完整理解反諷與複雜語境。
@@ -219,7 +291,7 @@ CSV datasets / SQLite / ONNX models
 - SQLite 適合單服務展示，不適合多副本高併發。
 - 目前可信內容層沒有 LLM 生成與向量資料庫。
 
-## 十三、未來工作
+## 十四、未來工作
 
 1. 改用合法授權的地點及評論 API。
 2. 將 SQLite 升級 PostgreSQL，加入 Migration 與 OAuth。
@@ -227,6 +299,6 @@ CSV datasets / SQLite / ONNX models
 4. 串接 LLM，但限制回答必須引用檢索來源。
 5. 蒐集使用者回饋，使用 Precision@K、NDCG 或滿意度評估推薦成效。
 
-## 十四、結論
+## 十五、結論
 
 本專題將推薦演算法、評論風險、保存排程、可信檢索、影像辨識、帳號資料庫與雲端部署整合成可操作的產品原型。相較單純的餐廳或食譜搜尋，本系統能根據情境說明「現在應該選什麼」及「為什麼」。

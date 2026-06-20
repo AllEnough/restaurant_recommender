@@ -30,6 +30,29 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .range { accent-color: var(--color-coral); }
 .focus-ring:focus { outline: 3px solid rgba(220, 90, 58, .22); outline-offset: 2px; }
 
+.analysis-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: .82rem;
+}
+
+.analysis-table th {
+  padding: .65rem .75rem;
+  border-bottom: 2px solid var(--color-line);
+  color: var(--color-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.analysis-table td {
+  padding: .7rem .75rem;
+  border-bottom: 1px solid var(--color-line);
+  white-space: nowrap;
+}
+
+.analysis-table tbody tr:hover { background: var(--color-canvas); }
+
 @media (max-width: 640px) {
   .hero-photo { background-position: center; }
 }

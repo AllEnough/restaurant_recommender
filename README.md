@@ -19,6 +19,7 @@
 | 內食推薦 | 食材標準化、候選召回、料理限制與混合式排序 |
 | 保存決策 | 已放天數、剩餘期限、價格、易腐程度與使用優先級 |
 | 可信內容 | 從審核知識庫取得料理步驟、內容編號、來源與日期 |
+| 進階分析 | 決策 Dashboard、模型前後比較、排名變化、分數拆解與敏感度分析 |
 | 帳號系統 | SQLite 註冊、登入、七天 Session、登出與收藏 |
 | 部署 | React production build、FastAPI、Docker、Railway Volume |
 
@@ -57,6 +58,7 @@ restaurant_recommender/
 ├── models/                   # YuNet、MobileFaceNet ONNX
 ├── tests/                    # Python 自動測試
 ├── report/                   # 專題報告與簡報大綱
+│   └── algorithm_examples.py # 可獨立執行的演算法展示
 ├── recommender.py            # 外食基礎推薦模型
 ├── recipe_recommender.py     # 內食召回與排序
 ├── review_analyzer.py        # 評論文字分析
@@ -166,6 +168,13 @@ npm run build --prefix frontend
 - 外食與內食 API。
 - 註冊、登入、Session、收藏與登出。
 - 無人臉影像的錯誤處理。
+- 外食與內食 API 必須回傳 Dashboard、模型評估及分數拆解資料。
+
+報告時可獨立執行核心演算法範例：
+
+```bash
+python3 report/algorithm_examples.py
+```
 
 ## Railway 部署
 

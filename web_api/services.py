@@ -49,6 +49,162 @@ def serializable_records(frame: pd.DataFrame) -> list[dict]:
     return clean.to_dict(orient="records")
 
 
+def top_overlap(first: pd.DataFrame, second: pd.DataFrame, top_n: int) -> float:
+    first_names = set(first.head(top_n)["name"].tolist())
+    second_names = set(second.head(top_n)["name"].tolist())
+    if not first_names:
+        return 0.0
+    return round(len(first_names & second_names) / len(first_names) * 100, 1)
+
+
+def restaurant_analysis(
+    baseline: pd.DataFrame,
+    enhanced: pd.DataFrame,
+    displayed: pd.DataFrame,
+    top_n: int,
+    review_weight: int,
+) -> dict:
+    baseline_top = baseline.head(top_n)
+    enhanced_top = enhanced.head(top_n)
+    baseline_ranks = {name: index + 1 for index, name in enumerate(baseline["name"].tolist())}
+    enhanced_ranks = {name: index + 1 for index, name in enumerate(enhanced["name"].tolist())}
+    comparison = []
+    for name in dict.fromkeys(baseline_top["name"].tolist() + enhanced_top["name"].tolist()):
+        row = enhanced[enhanced["name"] == name]
+        if row.empty:
+            row = baseline[baseline["name"] == name]
+        item = row.iloc[0]
+        comparison.append(
+            {
+                "name": name,
+                "baseline_rank": baseline_ranks.get(name),
+                "enhanced_rank": enhanced_ranks.get(name),
+                "rank_change": baseline_ranks.get(name, len(baseline) + 1) - enhanced_ranks.get(name, len(enhanced) + 1),
+                "base_score": round(float(item.get("score", 0)), 1),
+                "final_score": round(float(item.get("final_score", item.get("score", 0))), 1),
+                "negative_ratio": round(float(item.get("negative_ratio", 0)), 1),
+            }
+        )
+
+    risk_counts = enhanced["review_risk"].value_counts().to_dict() if "review_risk" in enhanced else {}
+    sensitivity = []
+    strategies = [
+        ("目前綜合排序", "final_score", False),
+        ("省錢優先", "cp_score", False),
+        ("距離優先", "distance", True),
+        ("評分優先", "rating", False),
+        ("口碑優先", "sentiment_score", False),
+        ("低負評優先", "negative_ratio", True),
+    ]
+    for label, column, ascending in strategies:
+        if column in enhanced and not enhanced.empty:
+            winner = enhanced.sort_values(column, ascending=ascending).iloc[0]
+            sensitivity.append({"strategy": label, "winner": winner["name"], "value": round(float(winner[column]), 1)})
+
+    score_breakdown = []
+    for _, row in displayed.iterrows():
+        score_breakdown.append(
+            {
+                "name": row["name"],
+                "base_score": round(float(row.get("score", 0)), 1),
+                "review_adjustment": round(float(row.get("review_adjustment", 0)) * review_weight / 100, 1),
+                "intent_adjustment": round(float(row.get("intent_adjustment", 0)), 1),
+                "final_score": round(float(row.get("final_score", row.get("score", 0))), 1),
+            }
+        )
+
+    return {
+        "dashboard": {
+            "candidate_count": len(enhanced),
+            "average_negative_ratio": round(float(enhanced_top["negative_ratio"].mean()), 1) if not enhanced_top.empty else 0,
+            "low_risk_count": int((enhanced["review_risk"] == "低").sum()) if "review_risk" in enhanced else 0,
+            "average_final_score": round(float(enhanced_top["final_score"].mean()), 1) if not enhanced_top.empty else 0,
+        },
+        "evaluation": {
+            "top_overlap": top_overlap(baseline, enhanced, top_n),
+            "baseline_average_negative": round(float(baseline_top["negative_ratio"].mean()), 1) if not baseline_top.empty else 0,
+            "enhanced_average_negative": round(float(enhanced_top["negative_ratio"].mean()), 1) if not enhanced_top.empty else 0,
+            "first_changed": bool(not baseline_top.empty and not enhanced_top.empty and baseline_top.iloc[0]["name"] != enhanced_top.iloc[0]["name"]),
+            "comparison": comparison,
+        },
+        "risk_distribution": {str(key): int(value) for key, value in risk_counts.items()},
+        "score_breakdown": score_breakdown,
+        "sensitivity": sensitivity,
+    }
+
+
+def recipe_analysis(
+    baseline: pd.DataFrame,
+    enhanced: pd.DataFrame,
+    displayed: pd.DataFrame,
+    priorities: list[dict],
+    normalization: list[dict],
+    top_n: int,
+) -> dict:
+    baseline_top = baseline.head(top_n)
+    enhanced_top = enhanced.head(top_n)
+    baseline_ranks = {name: index + 1 for index, name in enumerate(baseline["name"].tolist())}
+    enhanced_ranks = {name: index + 1 for index, name in enumerate(enhanced["name"].tolist())}
+    comparison = []
+    for name in dict.fromkeys(baseline_top["name"].tolist() + enhanced_top["name"].tolist()):
+        row = enhanced[enhanced["name"] == name]
+        if row.empty:
+            row = baseline[baseline["name"] == name]
+        item = row.iloc[0]
+        comparison.append(
+            {
+                "name": name,
+                "baseline_rank": baseline_ranks.get(name),
+                "enhanced_rank": enhanced_ranks.get(name),
+                "rank_change": baseline_ranks.get(name, len(baseline) + 1) - enhanced_ranks.get(name, len(enhanced) + 1),
+                "base_score": round(float(item.get("score", 0)), 1),
+                "final_score": round(float(item.get("final_score", item.get("score", 0))), 1),
+                "missing_count": int(item.get("missing_count", 0)),
+            }
+        )
+
+    score_breakdown = []
+    for _, row in displayed.iterrows():
+        score_breakdown.append(
+            {
+                "name": row["name"],
+                "ingredient_score": round(float(row.get("ingredient_score", 0)), 1),
+                "time_score": round(float(row.get("time_score", 0)), 1),
+                "difficulty_score": round(float(row.get("difficulty_score", 0)), 1),
+                "calorie_score": round(float(row.get("calorie_score", 0)), 1),
+                "missing_penalty": round(float(row.get("missing_penalty", 0)), 1),
+                "priority_bonus": round(float(row.get("priority_bonus", 0)), 1),
+                "final_score": round(float(row.get("final_score", 0)), 1),
+            }
+        )
+
+    coverage = int((displayed["knowledge_status"] == "已檢索可信內容").sum()) if "knowledge_status" in displayed else 0
+    high_priority_names = {row["ingredient"] for row in priorities if row["level"] == "高"}
+    high_priority_usage = sum(
+        any(name in high_priority_names for name in parse_ingredients(value))
+        for value in enhanced_top.get("priority_ingredients", pd.Series(dtype=str))
+    )
+    return {
+        "dashboard": {
+            "candidate_count": len(enhanced),
+            "cookable_count": int((enhanced["missing_count"] == 0).sum()) if "missing_count" in enhanced else 0,
+            "average_missing_count": round(float(enhanced_top["missing_count"].mean()), 1) if not enhanced_top.empty else 0,
+            "average_priority_bonus": round(float(enhanced_top["priority_bonus"].mean()), 1) if not enhanced_top.empty else 0,
+        },
+        "evaluation": {
+            "top_overlap": top_overlap(baseline, enhanced, top_n),
+            "baseline_average_missing": round(float(baseline_top["missing_count"].mean()), 1) if not baseline_top.empty else 0,
+            "enhanced_average_missing": round(float(enhanced_top["missing_count"].mean()), 1) if not enhanced_top.empty else 0,
+            "high_priority_usage": int(high_priority_usage),
+            "comparison": comparison,
+        },
+        "score_breakdown": score_breakdown,
+        "priorities": priorities,
+        "normalization": normalization,
+        "knowledge_coverage": {"covered": coverage, "total": len(displayed)},
+    }
+
+
 def haversine_minutes(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radius = 6_371_000
     lat1_rad, lat2_rad = math.radians(lat1), math.radians(lat2)
@@ -155,11 +311,14 @@ def recommend_restaurant_payload(payload) -> dict:
         result = result[result["negative_ratio"] <= payload.max_negative_ratio]
         if payload.hide_high_risk:
             result = result[result["review_risk"] != "高"]
+    baseline = result.sort_values(by=["score", "rating"], ascending=[False, False]).reset_index(drop=True)
     result = apply_review_adjustment(result, payload.use_review_analysis, payload.review_weight)
     intent = payload.scenario if payload.scenario != "手動自訂" else payload.smart_mode
-    result = apply_intent_adjustment(result, intent).head(payload.top_n)
+    enhanced = apply_intent_adjustment(result, intent).reset_index(drop=True)
+    result = enhanced.head(payload.top_n)
     return {
         "results": serializable_records(result),
+        "analysis": restaurant_analysis(baseline, enhanced, result, payload.top_n, payload.review_weight),
         "meta": {
             "candidate_count": len(candidates),
             "result_count": len(result),
@@ -232,16 +391,21 @@ def recommend_recipe_payload(payload) -> dict:
         payload.only_cookable,
     )
     result = attach_recipe_knowledge(result, load_recipe_knowledge(ROOT / "recipe_knowledge.csv"))
+    baseline = result.sort_values(by=["score", "recall_score", "matched_count", "time"], ascending=[False, False, False, True]).reset_index(drop=True)
     priority_rows = [calculate_priority(item) for item in payload.ingredients]
     profiles = {row["ingredient"]: row for row in priority_rows}
-    result = apply_recipe_priority(result, profiles).head(payload.top_n)
+    enhanced = apply_recipe_priority(result, profiles).reset_index(drop=True)
+    result = enhanced.head(payload.top_n)
     records = serializable_records(result)
     for row in records:
         row["steps"] = [step.strip() for step in str(row.get("steps", "")).split("|") if step.strip()]
+    normalization = get_ingredient_normalization_report(ingredient_text)
+    sorted_priorities = sorted(priority_rows, key=lambda row: (-row["priority_score"], -row["scheduling_ratio"]))
     return {
         "results": records,
-        "priorities": sorted(priority_rows, key=lambda row: (-row["priority_score"], -row["scheduling_ratio"])),
-        "normalization": get_ingredient_normalization_report(ingredient_text),
+        "priorities": sorted_priorities,
+        "normalization": normalization,
+        "analysis": recipe_analysis(baseline, enhanced, result, sorted_priorities, normalization, payload.top_n),
         "meta": {
             "result_count": len(result),
             "scenario": payload.scenario,

@@ -27,7 +27,12 @@ class WebApiTest(unittest.TestCase):
     def test_recommendation_endpoints(self):
         restaurant = self.client.post("/api/recommend/restaurants", json={"scenario": "大學生省錢午餐"})
         self.assertEqual(restaurant.status_code, 200)
-        self.assertGreater(len(restaurant.json()["results"]), 0)
+        restaurant_data = restaurant.json()
+        self.assertGreater(len(restaurant_data["results"]), 0)
+        self.assertIn("dashboard", restaurant_data["analysis"])
+        self.assertIn("evaluation", restaurant_data["analysis"])
+        self.assertGreater(len(restaurant_data["analysis"]["score_breakdown"]), 0)
+        self.assertGreater(len(restaurant_data["analysis"]["sensitivity"]), 0)
 
         recipe = self.client.post(
             "/api/recommend/recipes",
@@ -39,7 +44,12 @@ class WebApiTest(unittest.TestCase):
             },
         )
         self.assertEqual(recipe.status_code, 200)
-        self.assertGreater(len(recipe.json()["results"]), 0)
+        recipe_data = recipe.json()
+        self.assertGreater(len(recipe_data["results"]), 0)
+        self.assertIn("dashboard", recipe_data["analysis"])
+        self.assertIn("evaluation", recipe_data["analysis"])
+        self.assertGreater(len(recipe_data["analysis"]["priorities"]), 0)
+        self.assertGreater(len(recipe_data["analysis"]["score_breakdown"]), 0)
 
     def test_register_login_and_favorites(self):
         register = self.client.post(
