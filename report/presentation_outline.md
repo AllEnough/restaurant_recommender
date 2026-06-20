@@ -223,4 +223,5 @@ CSV + SQLite + ONNX
 - 瀏覽器已允許相機與定位。
 - 準備外食、OpenCV、內食與登入四組備援截圖。
 - 現場 Demo 不先展開進階分析，先讓老師看到推薦結果。
+- 若使用手機展示，進階分析 Dashboard 會維持單頁寬度，排名與食材寬表格可在區塊內左右滑動。
 - 先執行 `python3 report/algorithm_examples.py`，確認三組演算法排名可正常輸出。
