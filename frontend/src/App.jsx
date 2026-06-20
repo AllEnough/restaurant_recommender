@@ -52,6 +52,39 @@ const quickScenarioValues = {
   "手動自訂": { smart_mode: "自訂" },
 };
 
+const recipeScenarioValues = {
+  "宅家不出門": {
+    smart_mode: "我不想出門", max_time: 25, max_calories: 800, max_missing: 0, only_cookable: true,
+    ingredients: [
+      { name: "雞蛋", days_stored: 5, shelf_life: 14, price: 60, perishability: "中" },
+      { name: "白飯", days_stored: 1, shelf_life: 3, price: 20, perishability: "中" },
+      { name: "蔥", days_stored: 3, shelf_life: 7, price: 25, perishability: "高" },
+      { name: "醬油", days_stored: 30, shelf_life: 180, price: 70, perishability: "低" },
+    ],
+  },
+  "清冰箱減浪費": { ...recipeDefaults, ingredients: recipeDefaults.ingredients.map((item) => ({ ...item })) },
+  "健身低熱量": {
+    smart_mode: "低熱量", max_time: 35, difficulty: "簡單", max_calories: 500, max_missing: 1, only_cookable: false,
+    ingredients: [
+      { name: "雞胸肉", days_stored: 2, shelf_life: 3, price: 95, perishability: "高" },
+      { name: "生菜", days_stored: 3, shelf_life: 5, price: 55, perishability: "高" },
+      { name: "玉米", days_stored: 2, shelf_life: 5, price: 35, perishability: "中" },
+      { name: "番茄", days_stored: 4, shelf_life: 6, price: 45, perishability: "高" },
+      { name: "地瓜", days_stored: 5, shelf_life: 14, price: 45, perishability: "中" },
+    ],
+  },
+  "手動自訂": { smart_mode: "自訂" },
+};
+
+function detectMealTime(date = new Date()) {
+  const hour = date.getHours();
+  if (hour >= 5 && hour < 11) return "早餐";
+  if (hour >= 11 && hour < 14) return "午餐";
+  if (hour >= 14 && hour < 17) return "下午茶";
+  if (hour >= 17 && hour < 22) return "晚餐";
+  return "宵夜";
+}
+
 function Field({ label, children, hint }) {
   return <label className="grid gap-1.5 text-sm font-bold text-ink">{label}{children}{hint && <span className="text-xs font-normal text-muted">{hint}</span>}</label>;
 }
@@ -276,6 +309,15 @@ function AuthModal({ mode, setMode, form, setForm, error, busy, onSubmit, onClos
   </div>;
 }
 
+function FavoritesModal({ favorites, onRemove, onClose }) {
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" role="dialog" aria-modal="true">
+    <div className="w-full max-w-lg rounded-md bg-white p-5 shadow-2xl">
+      <div className="flex items-start justify-between"><div><p className="text-sm font-black text-coral">個人收藏</p><h2 className="text-2xl font-black">已收藏 {favorites.length} 筆</h2></div><button onClick={onClose} title="關閉" className="grid size-9 place-items-center rounded-md border border-line"><X size={18}/></button></div>
+      {favorites.length === 0 ? <div className="py-10 text-center text-muted"><Heart className="mx-auto mb-3"/><p className="font-bold">還沒有收藏餐廳或食譜</p></div> : <div className="mt-5 max-h-[55vh] overflow-y-auto border-y border-line">{favorites.map((item) => <div key={`${item.kind}-${item.item_name}`} className="flex items-center justify-between gap-3 border-b border-line px-1 py-3 last:border-b-0"><div><span className={`text-xs font-black ${item.kind === "restaurant" ? "text-coral" : "text-leaf"}`}>{item.kind === "restaurant" ? "餐廳" : "食譜"}</span><div className="font-black">{item.item_name}</div></div><button onClick={()=>onRemove(item.kind,item.item_name)} className="rounded-md border border-line px-3 py-2 text-sm font-bold text-coral">移除</button></div>)}</div>}
+    </div>
+  </div>;
+}
+
 function EmotionModal({ onApply, onClose }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -337,12 +379,20 @@ function App() {
   const [authForm, setAuthForm] = useState({ display_name: "", email: "", password: "" });
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [emotionOpen, setEmotionOpen] = useState(false);
   const [emotionResult, setEmotionResult] = useState(null);
   const [analysisOpen, setAnalysisOpen] = useState(true);
+  const [weatherInfo, setWeatherInfo] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [newIngredient, setNewIngredient] = useState("");
 
   useEffect(() => { api.options().then(setOptions).catch((err) => setError(err.message)); }, []);
   useEffect(() => { api.me().then(({user}) => { setUser(user); return api.favorites(); }).then(({favorites}) => setFavorites(favorites)).catch(() => {}); }, []);
+  useEffect(() => {
+    setRestaurantForm((form) => ({ ...form, meal_time: detectMealTime() }));
+    refreshWeather("Xitun District, Taichung, Taiwan");
+  }, []);
 
   const results = mode === "restaurant" ? restaurantData?.results : recipeData?.results;
   const top = results?.[0];
@@ -353,18 +403,48 @@ function App() {
 
   function selectRestaurantScenario(value) {
     setRestaurantForm((form) => ({ ...form, scenario: value, ...(quickScenarioValues[value] || {}) }));
+    setRestaurantData(null);
+  }
+
+  function selectRecipeScenario(value) {
+    const preset = recipeScenarioValues[value] || {};
+    setRecipeForm((form) => ({
+      ...form,
+      ...preset,
+      scenario: value,
+      ingredients: preset.ingredients ? preset.ingredients.map((item) => ({ ...item })) : form.ingredients,
+    }));
+    setRecipeData(null);
+  }
+
+  async function refreshWeather(location) {
+    setWeatherLoading(true);
+    try {
+      const current = await api.weather(location);
+      setWeatherInfo(current);
+      setRestaurantForm((form) => ({ ...form, weather: current.weather || "普通" }));
+    } catch (err) {
+      setWeatherInfo({ ok: false, weather: "普通", location: "手動模式", error: err.message });
+    } finally { setWeatherLoading(false); }
   }
 
   async function locate() {
     if (!navigator.geolocation) return setError("瀏覽器不支援定位");
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => setRestaurantForm((form) => ({ ...form, latitude: coords.latitude, longitude: coords.longitude })),
+      ({ coords }) => {
+        setRestaurantForm((form) => ({ ...form, latitude: coords.latitude, longitude: coords.longitude }));
+        refreshWeather(`${coords.latitude},${coords.longitude}`);
+      },
       () => setError("無法取得定位，請檢查瀏覽器權限"),
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }
 
   async function submit() {
+    if (mode === "recipe" && !recipeForm.ingredients.some((item) => item.name.trim())) {
+      setError("請至少輸入一項冰箱食材");
+      return;
+    }
     setLoading(true); setError("");
     try {
       if (mode === "restaurant") setRestaurantData(await api.restaurants(restaurantForm));
@@ -375,12 +455,19 @@ function App() {
   }
 
   function addIngredient() {
-    const name = window.prompt("輸入食材名稱");
-    if (name?.trim()) setRecipeForm((form) => ({ ...form, ingredients: [...form.ingredients, { name: name.trim(), days_stored: 1, shelf_life: 7, price: 40, perishability: "中" }] }));
+    const name = newIngredient.trim();
+    if (name) {
+      setRecipeForm((form) => ({ ...form, ingredients: [...form.ingredients, { name, days_stored: 1, shelf_life: 7, price: 40, perishability: "中" }] }));
+      setNewIngredient("");
+    }
   }
 
   function updateIngredient(index, key, value) {
     setRecipeForm((form) => ({ ...form, ingredients: form.ingredients.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
+  }
+
+  function removeIngredient(index) {
+    setRecipeForm((form) => ({ ...form, ingredients: form.ingredients.filter((_, i) => i !== index) }));
   }
 
   async function submitAuth(event) {
@@ -394,7 +481,7 @@ function App() {
   }
 
   async function logout() {
-    await api.logout(); setUser(null); setFavorites([]);
+    await api.logout(); setUser(null); setFavorites([]); setFavoritesOpen(false);
   }
 
   function isSaved(kind, name) { return favorites.some((item) => item.kind === kind && item.item_name === name); }
@@ -409,7 +496,7 @@ function App() {
     <header className="sticky top-0 z-30 border-b border-line bg-canvas/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4 sm:px-6">
         <div className="flex items-center gap-3"><div className="grid size-9 place-items-center rounded-md bg-coral text-white"><Utensils size={20}/></div><div><div className="font-black">智慧飲食決策</div><div className="text-xs text-muted">外食避雷 · 內食減浪費</div></div></div>
-        {user ? <div className="flex items-center gap-2"><div className="hidden text-right sm:block"><div className="text-sm font-black">{user.display_name}</div><div className="text-xs text-muted">收藏 {favorites.length} 筆</div></div><button onClick={logout} title="登出" className="focus-ring grid size-10 place-items-center rounded-md border border-line bg-white"><LogOut size={17}/></button></div> : <button onClick={()=>setAuthOpen(true)} className="focus-ring flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-bold"><LogIn size={17}/>登入</button>}
+        {user ? <div className="flex items-center gap-2"><div className="hidden text-right sm:block"><div className="text-sm font-black">{user.display_name}</div><div className="text-xs text-muted">已登入個人帳號</div></div><button onClick={()=>setFavoritesOpen(true)} title="查看收藏" className="focus-ring flex h-10 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-black"><Heart size={17} fill={favorites.length ? "currentColor" : "none"}/><span>{favorites.length}</span></button><button onClick={logout} title="登出" className="focus-ring grid size-10 place-items-center rounded-md border border-line bg-white"><LogOut size={17}/></button></div> : <button onClick={()=>setAuthOpen(true)} className="focus-ring flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-bold"><LogIn size={17}/>登入</button>}
       </div>
     </header>
 
@@ -434,18 +521,48 @@ function App() {
             <Field label="目前心情"><Select value={restaurantForm.mood} onChange={(e) => updateRestaurant("mood", e.target.value)}>{["省錢","疲累","開心","心情不好","選擇困難"].map((x) => <option key={x}>{x}</option>)}</Select>{emotionResult && <span className="text-xs font-bold text-leaf">OpenCV：{emotionResult.expression_label}，已套用「{emotionResult.recommended_mood}」</span>}</Field>
             <button onClick={()=>setEmotionOpen(true)} className="focus-ring flex h-10 items-center justify-center gap-2 rounded-md border border-leaf/30 bg-leaf-soft text-sm font-black text-leaf"><Camera size={17}/>用表情帶入心情</button>
             <button onClick={locate} className="focus-ring flex h-10 items-center justify-center gap-2 rounded-md border border-line bg-white text-sm font-bold"><LocateFixed size={17}/>{restaurantForm.latitude ? "定位已套用" : "使用目前位置"}</button>
+            <div className="rounded-md border border-line bg-canvas p-3 text-xs leading-6 text-muted">
+              <div className="flex items-center justify-between gap-2"><span><b className="text-ink">自動天氣：</b>{weatherLoading ? "取得中" : `${restaurantForm.weather}${weatherInfo?.temperature_c != null ? ` · ${weatherInfo.temperature_c}°C` : ""}`}</span><button type="button" onClick={()=>refreshWeather(restaurantForm.latitude ? `${restaurantForm.latitude},${restaurantForm.longitude}` : "Xitun District, Taichung, Taiwan")} className="font-black text-leaf">更新</button></div>
+              <div><b className="text-ink">自動時段：</b>{restaurantForm.meal_time} · 依裝置時間判斷</div>
+              <div><b className="text-ink">距離基準：</b>{restaurantForm.latitude ? `${restaurantForm.latitude.toFixed(4)}, ${restaurantForm.longitude.toFixed(4)}` : "尚未定位，使用資料集預估距離"}</div>
+            </div>
             <details className="border-t border-line pt-3"><summary className="cursor-pointer text-sm font-black">進階條件</summary><div className="mt-3 grid gap-3">
               <Field label="目前天氣"><Select value={restaurantForm.weather} onChange={(e) => updateRestaurant("weather", e.target.value)}>{["普通","熱","冷","雨天"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
               <Field label="用餐時段"><Select value={restaurantForm.meal_time} onChange={(e) => updateRestaurant("meal_time", e.target.value)}>{["早餐","午餐","下午茶","晚餐","宵夜"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
+              <Field label="外帶需求"><Select value={restaurantForm.need_takeout} onChange={(e) => updateRestaurant("need_takeout", e.target.value)}><option value="不限">不限</option><option value="yes">需要外帶</option><option value="no">只找內用</option></Select></Field>
+              <Field label={`可接受辣度 ${restaurantForm.max_spicy_level}`}><input className="range" type="range" min="0" max="5" value={restaurantForm.max_spicy_level} onChange={(e) => updateRestaurant("max_spicy_level", Number(e.target.value))}/></Field>
               <Field label="最低評分"><input className="focus-ring h-10 rounded-md border border-line px-3" type="number" min="0" max="5" step="0.1" value={restaurantForm.min_rating} onChange={(e) => updateRestaurant("min_rating", Number(e.target.value))}/></Field>
+              <Field label="排序方式"><Select value={restaurantForm.sort_by} onChange={(e) => updateRestaurant("sort_by", e.target.value)}>{["綜合推薦","CP值優先","距離最近","評分最高"].map((x)=><option key={x}>{x}</option>)}</Select></Field>
+              <Field label={`評論權重 ${restaurantForm.review_weight}%`}><input className="range" type="range" min="0" max="100" step="10" value={restaurantForm.review_weight} onChange={(e) => updateRestaurant("review_weight", Number(e.target.value))}/></Field>
+              <Field label={`最高負評比例 ${restaurantForm.max_negative_ratio}%`}><input className="range" type="range" min="0" max="100" step="5" value={restaurantForm.max_negative_ratio} onChange={(e) => updateRestaurant("max_negative_ratio", Number(e.target.value))}/></Field>
+              <Field label="顯示筆數"><Select value={restaurantForm.top_n} onChange={(e) => updateRestaurant("top_n", Number(e.target.value))}>{[3,5,8,10].map((x)=><option key={x}>{x}</option>)}</Select></Field>
               <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={restaurantForm.prefer_fast} onChange={(e) => updateRestaurant("prefer_fast", e.target.checked)}/>希望快速出餐</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={restaurantForm.use_review_analysis} onChange={(e) => updateRestaurant("use_review_analysis", e.target.checked)}/>納入評論分析</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={restaurantForm.hide_high_risk} onChange={(e) => updateRestaurant("hide_high_risk", e.target.checked)}/>隱藏高風險餐廳</label>
             </div></details>
           </div> : <div className="grid gap-4">
-            <Field label="快速情境"><Select value={recipeForm.scenario} onChange={(e) => updateRecipe("scenario", e.target.value)}>{(options?.recipes.scenarios || []).map((x) => <option key={x}>{x}</option>)}</Select></Field>
-            <div><div className="mb-2 flex items-center justify-between"><span className="text-sm font-black">冰箱食材</span><button className="text-sm font-black text-leaf" onClick={addIngredient}>＋ 新增</button></div><div className="grid gap-2">{recipeForm.ingredients.map((item, index) => <div className="rounded-md border border-line p-2" key={`${item.name}-${index}`}><div className="font-bold">{item.name}</div><div className="mt-2 grid grid-cols-2 gap-2"><input title="已放天數" className="h-9 rounded border border-line px-2 text-sm" type="number" value={item.days_stored} onChange={(e) => updateIngredient(index,"days_stored",Number(e.target.value))}/><input title="保存期限" className="h-9 rounded border border-line px-2 text-sm" type="number" value={item.shelf_life} onChange={(e) => updateIngredient(index,"shelf_life",Number(e.target.value))}/></div></div>)}</div></div>
+            <Field label="快速情境"><Select value={recipeForm.scenario} onChange={(e) => selectRecipeScenario(e.target.value)}>{(options?.recipes.scenarios || []).map((x) => <option key={x}>{x}</option>)}</Select><span className="text-xs font-bold text-leaf">已套用：{recipeForm.smart_mode} · 最多缺 {recipeForm.max_missing} 項 · {recipeForm.max_calories} kcal</span></Field>
+            <div>
+              <span className="text-sm font-black">冰箱食材</span>
+              <div className="mt-2 flex gap-2"><input className="focus-ring h-10 min-w-0 flex-1 rounded-md border border-line px-3 text-sm" value={newIngredient} placeholder="輸入食材名稱" onChange={(e)=>setNewIngredient(e.target.value)} onKeyDown={(e)=>{if(e.key === "Enter"){e.preventDefault();addIngredient();}}}/><button type="button" className="h-10 rounded-md bg-leaf px-3 text-sm font-black text-white" onClick={addIngredient}>新增</button></div>
+              <div className="mt-3 grid gap-2">{recipeForm.ingredients.map((item, index) => <div className="rounded-md border border-line p-3" key={`${item.name}-${index}`}>
+                <div className="flex items-center justify-between gap-2"><input aria-label="食材名稱" className="min-w-0 flex-1 border-0 bg-transparent font-black outline-none" value={item.name} onChange={(e)=>updateIngredient(index,"name",e.target.value)}/><button type="button" title="移除食材" onClick={()=>removeIngredient(index)} className="grid size-7 place-items-center rounded text-coral"><X size={16}/></button></div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Field label="已放天數"><input className="h-9 rounded border border-line px-2 text-sm" type="number" min="0" value={item.days_stored} onChange={(e) => updateIngredient(index,"days_stored",Number(e.target.value))}/></Field>
+                  <Field label="保存期限"><input className="h-9 rounded border border-line px-2 text-sm" type="number" min="1" value={item.shelf_life} onChange={(e) => updateIngredient(index,"shelf_life",Number(e.target.value))}/></Field>
+                  <Field label="估計價格"><input className="h-9 rounded border border-line px-2 text-sm" type="number" min="0" value={item.price} onChange={(e) => updateIngredient(index,"price",Number(e.target.value))}/></Field>
+                  <Field label="易腐程度"><select className="h-9 rounded border border-line bg-white px-2 text-sm" value={item.perishability} onChange={(e)=>updateIngredient(index,"perishability",e.target.value)}>{["低","中","高"].map((x)=><option key={x}>{x}</option>)}</select></Field>
+                </div>
+              </div>)}</div>
+            </div>
             <Field label={`料理時間 ${recipeForm.max_time} 分鐘`}><input className="range" type="range" min="5" max="60" step="5" value={recipeForm.max_time} onChange={(e) => updateRecipe("max_time",Number(e.target.value))}/></Field>
             <Field label={`熱量上限 ${recipeForm.max_calories} kcal`}><input className="range" type="range" min="150" max="900" step="50" value={recipeForm.max_calories} onChange={(e) => updateRecipe("max_calories",Number(e.target.value))}/></Field>
             <Field label="最多缺少食材"><Select value={recipeForm.max_missing} onChange={(e) => updateRecipe("max_missing",Number(e.target.value))}>{[0,1,2,3,4,5].map((x) => <option key={x}>{x}</option>)}</Select></Field>
+            <details className="border-t border-line pt-3"><summary className="cursor-pointer text-sm font-black">進階條件</summary><div className="mt-3 grid gap-3">
+              <Field label="料理難度"><Select value={recipeForm.difficulty} onChange={(e)=>updateRecipe("difficulty",e.target.value)}>{["不限","簡單","普通","困難"].map((x)=><option key={x}>{x}</option>)}</Select></Field>
+              <Field label="顯示筆數"><Select value={recipeForm.top_n} onChange={(e)=>updateRecipe("top_n",Number(e.target.value))}>{[3,5,8,10].map((x)=><option key={x}>{x}</option>)}</Select></Field>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={recipeForm.only_cookable} onChange={(e)=>updateRecipe("only_cookable",e.target.checked)}/>只顯示現有食材足夠的食譜</label>
+            </div></details>
           </div>}
           <button onClick={submit} disabled={loading} className="focus-ring mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-coral font-black text-white hover:bg-coral-dark"><Sparkles size={18}/>{loading ? "計算中..." : "開始智慧推薦"}</button>
           {error && <p className="mt-3 flex gap-2 rounded-md bg-[#fff0eb] p-3 text-sm text-coral-dark"><AlertTriangle size={18}/>{error}</p>}
@@ -486,6 +603,11 @@ function App() {
       </div>
     </main>
     {authOpen && <AuthModal mode={authMode} setMode={setAuthMode} form={authForm} setForm={setAuthForm} error={authError} busy={authBusy} onSubmit={submitAuth} onClose={()=>setAuthOpen(false)}/>} 
+    {favoritesOpen && <FavoritesModal
+      favorites={favorites}
+      onRemove={async (kind,name)=>{await api.removeFavorite(kind,name);setFavorites((await api.favorites()).favorites);}}
+      onClose={()=>setFavoritesOpen(false)}
+    />}
     {emotionOpen && <EmotionModal onClose={()=>setEmotionOpen(false)} onApply={(result)=>{setEmotionResult(result);updateRestaurant("mood",result.recommended_mood);}}/>}
   </div>;
 }

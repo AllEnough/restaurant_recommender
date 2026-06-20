@@ -51,6 +51,23 @@ class WebApiTest(unittest.TestCase):
         self.assertGreater(len(recipe_data["analysis"]["priorities"]), 0)
         self.assertGreater(len(recipe_data["analysis"]["score_breakdown"]), 0)
 
+    def test_recipe_scenarios_apply_real_constraints(self):
+        ingredients = [
+            {"name": "雞蛋", "days_stored": 4, "shelf_life": 14, "price": 60, "perishability": "中"},
+            {"name": "白飯", "days_stored": 1, "shelf_life": 3, "price": 20, "perishability": "中"},
+            {"name": "蔥", "days_stored": 3, "shelf_life": 7, "price": 25, "perishability": "高"},
+            {"name": "醬油", "days_stored": 30, "shelf_life": 180, "price": 70, "perishability": "低"},
+        ]
+        home = self.client.post(
+            "/api/recommend/recipes", json={"scenario": "宅家不出門", "ingredients": ingredients}
+        ).json()
+        fitness = self.client.post(
+            "/api/recommend/recipes", json={"scenario": "健身低熱量", "ingredients": ingredients}
+        ).json()
+        self.assertTrue(home["meta"]["effective_only_cookable"])
+        self.assertEqual(home["meta"]["effective_max_missing"], 0)
+        self.assertEqual(fitness["meta"]["effective_max_calories"], 500)
+
     def test_register_login_and_favorites(self):
         register = self.client.post(
             "/api/auth/register",

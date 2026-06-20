@@ -380,15 +380,25 @@ def recipe_options() -> dict:
 def recommend_recipe_payload(payload) -> dict:
     recipes = load_recipes(ROOT / "recipes.csv")
     ingredient_text = ",".join(item.name for item in payload.ingredients)
+    max_time = payload.max_time
+    max_calories = payload.max_calories
+    max_missing = payload.max_missing
+    only_cookable = payload.only_cookable
+    if payload.scenario == "宅家不出門":
+        max_missing = 0
+        only_cookable = True
+    elif payload.scenario == "健身低熱量":
+        max_time = min(max_time, 40)
+        max_calories = min(max_calories, 500)
     result = recommend_recipes(
         recipes,
         ingredient_text,
-        payload.max_time,
+        max_time,
         payload.difficulty,
         len(recipes),
-        payload.max_calories,
-        payload.max_missing,
-        payload.only_cookable,
+        max_calories,
+        max_missing,
+        only_cookable,
     )
     result = attach_recipe_knowledge(result, load_recipe_knowledge(ROOT / "recipe_knowledge.csv"))
     baseline = result.sort_values(by=["score", "recall_score", "matched_count", "time"], ascending=[False, False, False, True]).reset_index(drop=True)
@@ -410,5 +420,9 @@ def recommend_recipe_payload(payload) -> dict:
             "result_count": len(result),
             "scenario": payload.scenario,
             "smart_mode": payload.smart_mode,
+            "effective_max_time": max_time,
+            "effective_max_calories": max_calories,
+            "effective_max_missing": max_missing,
+            "effective_only_cookable": only_cookable,
         },
     }

@@ -18,6 +18,7 @@ async function upload(path, formData) {
 
 export const api = {
   options: () => request("/api/options"),
+  weather: (location = "Xitun District, Taichung, Taiwan") => request(`/api/weather?location=${encodeURIComponent(location)}`),
   restaurants: (payload) => request("/api/recommend/restaurants", { method: "POST", body: JSON.stringify(payload) }),
   recipes: (payload) => request("/api/recommend/recipes", { method: "POST", body: JSON.stringify(payload) }),
   me: () => request("/api/auth/me"),
