@@ -292,6 +292,7 @@ function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [emotionOpen, setEmotionOpen] = useState(false);
   const [emotionResult, setEmotionResult] = useState(null);
+  const [analysisOpen, setAnalysisOpen] = useState(true);
 
   useEffect(() => { api.options().then(setOptions).catch((err) => setError(err.message)); }, []);
   useEffect(() => { api.me().then(({user}) => { setUser(user); return api.favorites(); }).then(({favorites}) => setFavorites(favorites)).catch(() => {}); }, []);
@@ -321,6 +322,7 @@ function App() {
     try {
       if (mode === "restaurant") setRestaurantData(await api.restaurants(restaurantForm));
       else setRecipeData(await api.recipes(recipeForm));
+      setAnalysisOpen(true);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
@@ -414,7 +416,19 @@ function App() {
 
           {!results ? <EmptyState mode={mode}/> : results.length === 0 ? <div className="rounded-md border border-coral/30 bg-[#fff0eb] p-5"><h3 className="font-black">目前條件沒有結果</h3><p className="mt-1 text-sm text-muted">放寬距離、評分或可缺少食材數後再試一次。</p></div> : <div className="grid gap-3">{results.map((row,index) => mode === "restaurant" ? <RestaurantCard key={row.name} row={row} rank={index+1} saved={isSaved("restaurant",row.name)} canSave={Boolean(user)} onSave={()=>toggleFavorite("restaurant",row.name)}/> : <RecipeCard key={row.name} row={row} rank={index+1} saved={isSaved("recipe",row.name)} canSave={Boolean(user)} onSave={()=>toggleFavorite("recipe",row.name)}/>)}</div>}
 
-          {results && <section className="mt-5 rounded-md border border-line bg-white p-4"><div className="flex items-center gap-2 font-black"><BarChart3 size={18}/>進階分析與模型資訊</div>{mode === "restaurant" ? <RestaurantAdvanced data={restaurantData}/> : <RecipeAdvanced data={recipeData}/>}</section>}
+          {results && <section className="mt-5 rounded-md border border-line bg-white p-4">
+            <button type="button" onClick={()=>setAnalysisOpen((open)=>!open)} className="flex w-full items-center justify-between gap-3 text-left font-black" aria-expanded={analysisOpen}>
+              <span className="flex items-center gap-2"><BarChart3 size={18}/>進階分析與模型資訊</span>
+              <ChevronDown size={18} className={`transition-transform ${analysisOpen ? "rotate-180" : ""}`}/>
+            </button>
+            {analysisOpen && ((mode === "restaurant" ? restaurantData?.analysis : recipeData?.analysis)
+              ? (mode === "restaurant" ? <RestaurantAdvanced data={restaurantData}/> : <RecipeAdvanced data={recipeData}/>)
+              : <div className="mt-4 rounded-md border border-coral/25 bg-[#fff0eb] p-4">
+                  <p className="font-black text-coral-dark">這筆結果來自舊版推薦資料，尚未包含模型分析。</p>
+                  <p className="mt-1 text-sm text-muted">重新計算一次後，系統會載入 Dashboard、排名比較、分數拆解與敏感度分析。</p>
+                  <button type="button" onClick={submit} disabled={loading} className="mt-3 h-10 rounded-md bg-coral px-4 text-sm font-black text-white">{loading ? "重新計算中..." : "重新計算並載入分析"}</button>
+                </div>)}
+          </section>}
         </section>
       </div>
     </main>
