@@ -86,11 +86,11 @@ function detectMealTime(date = new Date()) {
 }
 
 function Field({ label, children, hint }) {
-  return <label className="grid gap-1.5 text-sm font-bold text-ink">{label}{children}{hint && <span className="text-xs font-normal text-muted">{hint}</span>}</label>;
+  return <label className="grid min-w-0 gap-1.5 text-sm font-bold text-ink">{label}{children}{hint && <span className="text-xs font-normal text-muted">{hint}</span>}</label>;
 }
 
 function Select({ value, onChange, children }) {
-  return <select className="focus-ring h-10 rounded-md border border-line bg-white px-3 font-medium" value={value} onChange={onChange}>{children}</select>;
+  return <select className="focus-ring h-10 w-full min-w-0 rounded-md border border-line bg-white px-3 font-medium" value={value} onChange={onChange}>{children}</select>;
 }
 
 function Metric({ label, value, tone = "plain" }) {
@@ -511,7 +511,7 @@ function App() {
       </div>
 
       <div className="mt-4 grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="self-start rounded-md border border-line bg-white p-4 lg:sticky lg:top-20">
+        <aside className="min-w-0 self-start rounded-md border border-line bg-white p-4 lg:sticky lg:top-20">
           <div className="mb-4 flex items-center gap-2"><SlidersIcon/><h2 className="text-lg font-black">{mode === "restaurant" ? "外食條件" : "冰箱條件"}</h2></div>
           {mode === "restaurant" ? <div className="grid gap-4">
             <Field label="快速情境"><Select value={restaurantForm.scenario} onChange={(e) => selectRestaurantScenario(e.target.value)}>{(options?.restaurants.scenarios || []).map((x) => <option key={x}>{x}</option>)}</Select></Field>
@@ -545,13 +545,13 @@ function App() {
             <div>
               <span className="text-sm font-black">冰箱食材</span>
               <div className="mt-2 flex gap-2"><input className="focus-ring h-10 min-w-0 flex-1 rounded-md border border-line px-3 text-sm" value={newIngredient} placeholder="輸入食材名稱" onChange={(e)=>setNewIngredient(e.target.value)} onKeyDown={(e)=>{if(e.key === "Enter"){e.preventDefault();addIngredient();}}}/><button type="button" className="h-10 rounded-md bg-leaf px-3 text-sm font-black text-white" onClick={addIngredient}>新增</button></div>
-              <div className="mt-3 grid gap-2">{recipeForm.ingredients.map((item, index) => <div className="rounded-md border border-line p-3" key={`${item.name}-${index}`}>
+              <div className="mt-3 grid min-w-0 gap-2">{recipeForm.ingredients.map((item, index) => <div className="min-w-0 rounded-md border border-line p-3" key={`${item.name}-${index}`}>
                 <div className="flex items-center justify-between gap-2"><input aria-label="食材名稱" className="min-w-0 flex-1 border-0 bg-transparent font-black outline-none" value={item.name} onChange={(e)=>updateIngredient(index,"name",e.target.value)}/><button type="button" title="移除食材" onClick={()=>removeIngredient(index)} className="grid size-7 place-items-center rounded text-coral"><X size={16}/></button></div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <Field label="已放天數"><input className="h-9 rounded border border-line px-2 text-sm" type="number" min="0" value={item.days_stored} onChange={(e) => updateIngredient(index,"days_stored",Number(e.target.value))}/></Field>
-                  <Field label="保存期限"><input className="h-9 rounded border border-line px-2 text-sm" type="number" min="1" value={item.shelf_life} onChange={(e) => updateIngredient(index,"shelf_life",Number(e.target.value))}/></Field>
-                  <Field label="估計價格"><input className="h-9 rounded border border-line px-2 text-sm" type="number" min="0" value={item.price} onChange={(e) => updateIngredient(index,"price",Number(e.target.value))}/></Field>
-                  <Field label="易腐程度"><select className="h-9 rounded border border-line bg-white px-2 text-sm" value={item.perishability} onChange={(e)=>updateIngredient(index,"perishability",e.target.value)}>{["低","中","高"].map((x)=><option key={x}>{x}</option>)}</select></Field>
+                <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+                  <Field label="已放天數"><input className="h-9 w-full min-w-0 rounded border border-line px-2 text-sm" type="number" min="0" value={item.days_stored} onChange={(e) => updateIngredient(index,"days_stored",Number(e.target.value))}/></Field>
+                  <Field label="保存期限"><input className="h-9 w-full min-w-0 rounded border border-line px-2 text-sm" type="number" min="1" value={item.shelf_life} onChange={(e) => updateIngredient(index,"shelf_life",Number(e.target.value))}/></Field>
+                  <Field label="估計價格"><input className="h-9 w-full min-w-0 rounded border border-line px-2 text-sm" type="number" min="0" value={item.price} onChange={(e) => updateIngredient(index,"price",Number(e.target.value))}/></Field>
+                  <Field label="易腐程度"><select className="h-9 w-full min-w-0 rounded border border-line bg-white px-2 text-sm" value={item.perishability} onChange={(e)=>updateIngredient(index,"perishability",e.target.value)}>{["低","中","高"].map((x)=><option key={x}>{x}</option>)}</select></Field>
                 </div>
               </div>)}</div>
             </div>
