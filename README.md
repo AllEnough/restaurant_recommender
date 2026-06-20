@@ -1,77 +1,88 @@
 # 智慧飲食決策系統
 
-本專題以「外食避雷、內食減浪費」為核心，整合餐廳評論風險、情境推薦、冰箱保存優先級、可信食譜檢索、登入收藏及 OpenCV 表情辨識。新版正式介面採用 React、Tailwind CSS 與 FastAPI；原本的 Streamlit 介面保留為功能完整的備援展示版本。
+智慧飲食決策系統是一套面向外食族與內食族的 Web 應用。外食模式整合預算、距離、情境與評論風險；內食模式根據冰箱食材、保存期限與料理限制推薦食譜。系統另提供 OpenCV 表情辨識、登入、Session 與收藏功能。
 
-## 已完成功能
+## 線上網站
 
-### 外食決策
+- 正式網站：[restaurantrecommender-production.up.railway.app](https://restaurantrecommender-production.up.railway.app)
+- 健康檢查：[API Health](https://restaurantrecommender-production.up.railway.app/api/health)
+- API 文件：網站網址後加上 `/docs`
 
-- 預算、距離、類型、天氣、時段、外帶、辣度與評分篩選。
-- 省錢午餐、快速外帶、聚餐不踩雷等快速情境。
-- 餐廳多條件加權、評論情緒、負評比例與情境意圖排序。
-- 推薦清單優先顯示，模型分數與進階分析收合於結果後方。
-- 瀏覽器定位與 Haversine 距離重算。
-- OpenCV 臉部偵測與表情分類，可將結果帶入推薦心情，亦可手動覆寫。
+## 核心功能
 
-### 內食決策
+| 模組 | 已完成功能 |
+|---|---|
+| 外食推薦 | 預算、距離、類型、天氣、時段、外帶、辣度、速度與最低評分 |
+| 評論分析 | 情緒分數、負評比例、風險分級、常見優缺點與排名調整 |
+| 情境感知 | 快速情境、心情策略、瀏覽器定位與 Haversine 距離 |
+| OpenCV | YuNet 臉部偵測、MobileFaceNet 表情分類、心情映射 |
+| 內食推薦 | 食材標準化、候選召回、料理限制與混合式排序 |
+| 保存決策 | 已放天數、剩餘期限、價格、易腐程度與使用優先級 |
+| 可信內容 | 從審核知識庫取得料理步驟、內容編號、來源與日期 |
+| 帳號系統 | SQLite 註冊、登入、七天 Session、登出與收藏 |
+| 部署 | React production build、FastAPI、Docker、Railway Volume |
 
-- 食材名稱標準化、候選召回與混合式排序。
-- 依已存放天數、保存期限、價格與易腐程度計算使用優先級。
-- 參考排程概念，提高快過期及高浪費成本食材的推薦權重。
-- 從 `recipe_knowledge.csv` 檢索審核過的步驟、來源與內容編號。
-- 推薦清單先呈現，保存排程與模型資訊置於進階區塊。
+推薦頁面會先呈現答案，再將評論細節、分數拆解與保存排程放入進階區塊。
 
-### 帳號系統
-
-登入不是展示用假畫面，FastAPI 會實際操作 SQLite：
-
-- `users`：帳號、顯示名稱、`scrypt` 密碼雜湊。
-- `sessions`：雜湊後的 Session Token 與到期時間。
-- `favorites`：每位使用者收藏的餐廳與食譜。
-- Session Token 透過 `HttpOnly`、`SameSite=Lax` Cookie 傳送。
-- 線上 HTTPS 環境設定 `APP_SECURE_COOKIE=1`。
-
-## 系統架構
+## 技術架構
 
 ```text
 Browser
-  └─ React 19 + Tailwind CSS 4
-       ├─ 外食與內食操作介面
-       ├─ 登入、註冊、收藏
-       └─ Camera / Geolocation API
-             ↓ HTTPS / JSON
-FastAPI
-  ├─ Auth / Session / Favorites
-  ├─ OpenCV YuNet + MobileFaceNet
-  ├─ 餐廳推薦與評論分析
-  ├─ 食材召回、混合排序與可信內容檢索
-  └─ React production 靜態檔
-             ↓
-CSV datasets + SQLite app.db + ONNX models
+  └─ React 19 + Tailwind CSS 4 + Vite
+       ├─ 外食／內食介面
+       ├─ Login / Favorites
+       └─ Camera / Geolocation
+                    ↓ JSON / HTTPS
+FastAPI + Uvicorn
+  ├─ Recommendation API
+  ├─ Authentication API
+  ├─ OpenCV DNN
+  └─ React static files
+                    ↓
+CSV datasets + SQLite + ONNX models
 ```
+
+正式版採單一服務部署：Docker 第一階段建置 React，第二階段執行 FastAPI；FastAPI 同時提供 `/api/*` 與 React 靜態網站。`app.py` 的 Streamlit 版本僅保留為備援介面。
 
 ## 專案結構
 
 ```text
 restaurant_recommender/
 ├── frontend/                 # React、Tailwind CSS、Vite
-├── web_api/                  # FastAPI、登入、推薦 API、OpenCV
-├── models/                   # YuNet 與表情辨識 ONNX 模型
-├── tests/                    # 推薦、帳號、收藏、表情 API 測試
-├── data/app.db               # 執行時建立，已忽略於 Git
-├── app.py                    # Streamlit 備援介面
-├── recommender.py            # 外食推薦
-├── recipe_recommender.py     # 內食推薦
-├── review_analyzer.py        # 評論分析
-├── weather_service.py        # 即時天氣
-├── Dockerfile                # React build + FastAPI runtime
-├── railway.json              # Railway 健康檢查與重啟策略
+├── web_api/
+│   ├── main.py               # FastAPI 與靜態網站
+│   ├── services.py           # API 推薦流程
+│   ├── auth.py               # SQLite 帳號、Session、收藏
+│   └── emotion.py            # OpenCV 表情辨識
+├── models/                   # YuNet、MobileFaceNet ONNX
+├── tests/                    # Python 自動測試
+├── report/                   # 專題報告與簡報大綱
+├── recommender.py            # 外食基礎推薦模型
+├── recipe_recommender.py     # 內食召回與排序
+├── review_analyzer.py        # 評論文字分析
+├── weather_service.py        # 天氣資料與分類
+├── restaurants.csv
+├── reviews.csv
+├── recipes.csv
+├── recipe_knowledge.csv
+├── app.py                    # Streamlit 備援版
+├── Dockerfile
+├── railway.json
 └── requirements.txt
 ```
 
-## 本機執行
+`data/app.db` 會在後端啟動時自動建立，且已排除於 Git。
 
-Python 建議使用專案 `.venv`，不要安裝到 macOS 系統 Python。
+## 本機開發
+
+### 需求
+
+- Python 3.11 以上
+- Node.js 20 以上
+- npm
+- VSCode
+
+### 安裝 Python 套件
 
 ```bash
 cd /Users/allenough/Developer/school/python/restaurant_recommender
@@ -80,58 +91,116 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-開發模式需開兩個 VSCode Terminal：
+### 啟動 FastAPI
 
 ```bash
-# Terminal 1：FastAPI
 .venv/bin/python -m uvicorn web_api.main:app --reload --port 8000
 ```
 
+API 文件：`http://127.0.0.1:8000/docs`
+
+### 啟動 React
+
+另開一個 Terminal：
+
 ```bash
-# Terminal 2：React
 cd frontend
 npm install
 npm run dev
 ```
 
-開啟 `http://127.0.0.1:5173`。API 文件位於 `http://127.0.0.1:8000/docs`。
+網站：`http://127.0.0.1:5173`
 
-正式模式：
+### 模擬正式模式
 
 ```bash
-cd frontend && npm ci && npm run build && cd ..
+cd frontend
+npm ci
+npm run build
+cd ..
 .venv/bin/python -m uvicorn web_api.main:app --host 127.0.0.1 --port 8000
 ```
 
-此時 React 與 API 皆由 `http://127.0.0.1:8000` 提供。
+此時 React 與 API 都由 `http://127.0.0.1:8000` 提供。
 
-## 自動測試
+## API 摘要
+
+| Method | Path | 說明 |
+|---|---|---|
+| GET | `/api/health` | 健康檢查 |
+| GET | `/api/options` | 餐廳與食譜選項 |
+| GET | `/api/weather` | 即時天氣分類 |
+| POST | `/api/recommend/restaurants` | 外食推薦 |
+| POST | `/api/recommend/recipes` | 內食推薦 |
+| POST | `/api/emotion/analyze` | 單張圖片表情辨識 |
+| POST | `/api/auth/register` | 註冊並建立 Session |
+| POST | `/api/auth/login` | 登入 |
+| POST | `/api/auth/logout` | 登出 |
+| GET | `/api/auth/me` | 目前登入者 |
+| GET/POST/DELETE | `/api/favorites` | 收藏管理 |
+
+## 帳號與資料庫
+
+登入功能會實際寫入 SQLite，不是前端模擬。
+
+| Table | 用途 |
+|---|---|
+| `users` | Email、顯示名稱、`scrypt` 密碼雜湊 |
+| `sessions` | SHA-256 Token 雜湊、使用者與到期時間 |
+| `favorites` | 使用者收藏的餐廳與食譜 |
+
+Session Cookie 設定為 `HttpOnly` 與 `SameSite=Lax`；線上環境透過 `APP_SECURE_COOKIE=1` 啟用 Secure Cookie。
+
+## 測試
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
-cd frontend && npm run build
+npm run build --prefix frontend
 ```
 
-測試涵蓋推薦 API、註冊登入、Session、收藏、登出與無臉影像錯誤處理。
+目前測試涵蓋：
+
+- 食材別名標準化。
+- 食譜候選必須命中食材。
+- 召回食譜必須具有可信知識內容。
+- 外食與內食 API。
+- 註冊、登入、Session、收藏與登出。
+- 無人臉影像的錯誤處理。
 
 ## Railway 部署
 
-1. 將目前分支推送至 GitHub。
-2. Railway 建立 New Project，選擇 Deploy from GitHub Repo。
-3. Railway 會由根目錄 `Dockerfile` 建置 React 與 FastAPI。
-4. 在 Variables 設定：
-   - `APP_DB_PATH=/app/data/app.db`
-   - `APP_SECURE_COOKIE=1`
-5. 為服務新增 Volume，掛載路徑必須是 `/app/data`，否則 SQLite 帳號會在重新部署後消失。
-6. 在 Networking 產生公開網域。
-7. 確認 `/api/health` 回傳 `status: ok`，再測試註冊、登出與重新登入。
+GitHub `main` 更新後，Railway 會依照 `Dockerfile` 自動重新部署。
 
-Railway 會注入 `PORT`，Docker 啟動命令已自動監聽該埠。若未掛 Volume，網站仍能運作，但帳號與收藏資料不是永久保存。
+### Variables
 
-## 隱私與限制
+```text
+PORT=8000
+APP_DB_PATH=/app/data/app.db
+APP_SECURE_COOKIE=1
+```
 
-- 表情辨識影像只在單次請求中處理，不寫入磁碟。
-- 表情分類只作為餐點推薦訊號，不是心理或醫療判斷。
-- 目前餐廳、評論與食譜主要來自專題資料集，不等同即時 Google Maps 全量資料。
-- SQLite 適合課堂展示與小型服務；多人正式營運應改用 PostgreSQL。
-- Streamlit Community Cloud 只能部署 `app.py` 備援版；React/FastAPI 完整版應部署到 Railway、Render 或其他容器平台。
+### Volume
+
+將 Railway Volume 掛載到：
+
+```text
+/app/data
+```
+
+沒有 Volume 時，重新部署後 SQLite 帳號與收藏可能消失。
+
+### Public Networking
+
+- Target Port：`8000`
+- Healthcheck：`/api/health`
+
+部署完成後應先確認 `/api/health` 回傳 HTTP 200，再測試註冊、收藏、登出、重新登入與重新部署後的資料保存。
+
+## 隱私、限制與未來方向
+
+- 相機影像只在單次請求的記憶體中處理，不寫入資料庫或檔案。
+- 表情分類只作為飲食推薦訊號，不是心理或醫療判斷。
+- 目前餐廳、評論與食譜為專題資料集，不是即時 Google Maps 全量資料。
+- 目前可信食譜層是本地檢索，尚未串接 LLM，因此不宣稱已完成完整 RAG。
+- SQLite 適合單一課堂展示服務；多副本與大量使用者應改用 PostgreSQL。
+- 後續可擴充合法授權的地點 API、向量檢索、來源約束 LLM 與推薦成效實驗。
