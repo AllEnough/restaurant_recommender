@@ -56,6 +56,7 @@
 React + Tailwind CSS
   ├─ 外食／內食表單
   ├─ 推薦卡片與進階分析
+  ├─ React Leaflet 互動地圖
   ├─ 登入與收藏
   └─ Camera / Geolocation
   ↓ REST API
@@ -116,6 +117,9 @@ CSV datasets / SQLite / ONNX models
 - Haversine 公式換算餐廳距離與預估步行分鐘。
 - 天氣服務轉換為普通、熱、冷與雨天。
 - 本地時間分類為早餐、午餐、下午茶、晚餐與宵夜。
+- React Leaflet 以 OpenStreetMap 為底圖，將推薦餐廳轉成可點擊圖針。
+- 第一名使用紅色，高 CP 使用綠色，中 CP 使用黃色，其餘使用藍色；定位成功後另顯示使用者位置。
+- Popup 顯示價格、評分、步行距離、CP 值與推薦分數，並提供 Google Maps 連結。
 
 ## 六、OpenCV 表情情境
 
@@ -256,6 +260,7 @@ final_score = min(max(base_score + priority_bonus, 0), 125)
 - 推薦清單後方提供預設展開、可收合的完整進階分析，不阻擋使用者先取得答案。
 - 外食顯示 Dashboard、模型前後比較、排名變化、分數拆解與權重敏感度。
 - 內食顯示 Dashboard、保存優先順序、食材標準化、模型比較、分數拆解與可信內容覆蓋。
+- 外食推薦清單與進階分析之間顯示互動地圖，保持「先答案、再空間、後模型」的閱讀順序。
 
 ## 十一、測試與驗證
 

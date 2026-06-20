@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from "react-leaflet";
 import {
   AlertTriangle,
   BarChart3,
@@ -104,6 +105,52 @@ function RecipeCard({ row, rank, saved, onSave, canSave }) {
     <p className="mt-4 border-l-4 border-coral bg-[#fff0eb] px-3 py-2 text-sm leading-6">{row.reason}</p>
     <details className="mt-3 border-t border-line pt-3 text-sm"><summary className="flex cursor-pointer items-center gap-2 font-bold"><CookingPot size={16}/>料理步驟與可信來源</summary><ol className="mt-3 grid gap-2 pl-5 text-muted">{(row.steps || []).map((step, index) => <li className="list-decimal" key={index}>{step}</li>)}</ol><p className="mt-3 text-xs text-muted">{row.knowledge_id} · {row.source_name} · 審核 {row.verified_date}</p></details>
   </article>;
+}
+
+function FitMapBounds({ points }) {
+  const map = useMap();
+  const signature = points.map((point) => point.join(",")).join("|");
+  useEffect(() => {
+    if (points.length === 1) map.setView(points[0], 16);
+    else if (points.length > 1) map.fitBounds(points, { padding: [36, 36], maxZoom: 16 });
+  }, [map, signature]);
+  return null;
+}
+
+function RestaurantMap({ rows, latitude, longitude }) {
+  const restaurants = rows.filter((row) => Number.isFinite(Number(row.latitude)) && Number.isFinite(Number(row.longitude)));
+  if (!restaurants.length) return null;
+
+  const restaurantPoints = restaurants.map((row) => [Number(row.latitude), Number(row.longitude)]);
+  const hasUserLocation = latitude !== null && longitude !== null && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
+  const userPoint = hasUserLocation ? [Number(latitude), Number(longitude)] : null;
+  const allPoints = userPoint ? [...restaurantPoints, userPoint] : restaurantPoints;
+
+  function markerColor(row, index) {
+    if (index === 0) return "#dc5a3a";
+    if (Number(row.cp_score) >= 80) return "#247a52";
+    if (Number(row.cp_score) >= 65) return "#e9ad35";
+    return "#3978b7";
+  }
+
+  return <section className="mt-5 overflow-hidden rounded-md border border-line bg-white">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+      <div><div className="flex items-center gap-2 font-black"><MapPin size={18}/>推薦餐廳互動地圖</div><p className="mt-1 text-sm text-muted">點選圖針查看推薦分數、距離與 CP 值。</p></div>
+      <div className="flex flex-wrap gap-3 text-xs font-bold text-muted"><span><i className="map-legend bg-coral"/>第一名</span><span><i className="map-legend bg-leaf"/>高 CP</span><span><i className="map-legend bg-sun"/>中 CP</span><span><i className="map-legend bg-[#3978b7]"/>一般</span>{userPoint && <span><i className="map-legend bg-[#7048a8]"/>你的位置</span>}</div>
+    </div>
+    <MapContainer className="restaurant-map" center={restaurantPoints[0]} zoom={15} scrollWheelZoom={false}>
+      <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+      <FitMapBounds points={allPoints}/>
+      {restaurants.map((row, index) => {
+        const color = markerColor(row, index);
+        return <CircleMarker key={row.name} center={[Number(row.latitude), Number(row.longitude)]} radius={index === 0 ? 13 : 10} pathOptions={{ color: "#fff", weight: 3, fillColor: color, fillOpacity: .96 }}>
+          <Tooltip permanent direction="center" className="rank-tooltip">{index + 1}</Tooltip>
+          <Popup minWidth={220}><div className="map-popup"><strong>{row.name}</strong><span>{row.category} · {row.price} 元</span><span>評分 {row.rating} · 距離 {row.distance} 分鐘</span><span>CP 值 {row.cp_score} · 推薦 {row.final_score ?? row.score}</span><a href={`https://www.google.com/maps/search/?api=1&query=${row.latitude},${row.longitude}`} target="_blank" rel="noreferrer">在 Google Maps 開啟</a></div></Popup>
+        </CircleMarker>;
+      })}
+      {userPoint && <CircleMarker center={userPoint} radius={9} pathOptions={{ color: "#fff", weight: 3, fillColor: "#7048a8", fillOpacity: 1 }}><Popup>你目前的位置</Popup></CircleMarker>}
+    </MapContainer>
+  </section>;
 }
 
 function RankChange({ value }) {
@@ -415,6 +462,12 @@ function App() {
           </div>}
 
           {!results ? <EmptyState mode={mode}/> : results.length === 0 ? <div className="rounded-md border border-coral/30 bg-[#fff0eb] p-5"><h3 className="font-black">目前條件沒有結果</h3><p className="mt-1 text-sm text-muted">放寬距離、評分或可缺少食材數後再試一次。</p></div> : <div className="grid gap-3">{results.map((row,index) => mode === "restaurant" ? <RestaurantCard key={row.name} row={row} rank={index+1} saved={isSaved("restaurant",row.name)} canSave={Boolean(user)} onSave={()=>toggleFavorite("restaurant",row.name)}/> : <RecipeCard key={row.name} row={row} rank={index+1} saved={isSaved("recipe",row.name)} canSave={Boolean(user)} onSave={()=>toggleFavorite("recipe",row.name)}/>)}</div>}
+
+          {mode === "restaurant" && results?.length > 0 && <RestaurantMap
+            rows={results}
+            latitude={restaurantForm.latitude}
+            longitude={restaurantForm.longitude}
+          />}
 
           {results && <section className="mt-5 rounded-md border border-line bg-white p-4">
             <button type="button" onClick={()=>setAnalysisOpen((open)=>!open)} className="flex w-full items-center justify-between gap-3 text-left font-black" aria-expanded={analysisOpen}>

@@ -15,6 +15,7 @@
 | 外食推薦 | 預算、距離、類型、天氣、時段、外帶、辣度、速度與最低評分 |
 | 評論分析 | 情緒分數、負評比例、風險分級、常見優缺點與排名調整 |
 | 情境感知 | 快速情境、心情策略、瀏覽器定位與 Haversine 距離 |
+| 美食地圖 | React Leaflet、OpenStreetMap、排名／CP 值圖針與使用者位置 |
 | OpenCV | YuNet 臉部偵測、MobileFaceNet 表情分類、心情映射 |
 | 內食推薦 | 食材標準化、候選召回、料理限制與混合式排序 |
 | 保存決策 | 已放天數、剩餘期限、價格、易腐程度與使用優先級 |
@@ -44,6 +45,8 @@ CSV datasets + SQLite + ONNX models
 ```
 
 正式版採單一服務部署：Docker 第一階段建置 React，第二階段執行 FastAPI；FastAPI 同時提供 `/api/*` 與 React 靜態網站。`app.py` 的 Streamlit 版本僅保留為備援介面。
+
+外食推薦完成後，React Leaflet 會在推薦清單與進階分析之間顯示互動地圖。底圖使用 OpenStreetMap；圖針依第一名與 CP 值分色，點擊可查看推薦資訊並前往 Google Maps。
 
 ## 專案結構
 

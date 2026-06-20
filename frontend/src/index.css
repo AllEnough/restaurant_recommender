@@ -53,6 +53,41 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .analysis-table tbody tr:hover { background: var(--color-canvas); }
 
+.restaurant-map {
+  width: 100%;
+  height: 460px;
+  background: #e7e3d9;
+  font-family: var(--font-sans);
+}
+
+.map-legend {
+  display: inline-block;
+  width: .65rem;
+  height: .65rem;
+  margin-right: .3rem;
+  border-radius: 999px;
+  vertical-align: -.02rem;
+}
+
+.leaflet-tooltip.rank-tooltip {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: white;
+  font-size: .68rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.rank-tooltip::before { display: none; }
+
+.map-popup { display: grid; gap: .3rem; font-family: var(--font-sans); }
+.map-popup strong { font-size: 1rem; }
+.map-popup span { color: var(--color-muted); }
+.map-popup a { margin-top: .25rem; color: var(--color-leaf); font-weight: 800; }
+
 @media (max-width: 640px) {
   .hero-photo { background-position: center; }
+  .restaurant-map { height: 360px; }
 }
