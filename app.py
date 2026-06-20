@@ -815,22 +815,21 @@ def get_nav_items(current_mode):
     if current_mode == "我要外食":
         return [
             ("推薦概覽", "overview"),
+            ("推薦清單", "list"),
+            ("美食地圖", "map"),
             ("決策儀表板", "dashboard"),
             ("模型評估", "evaluation"),
             ("評論分析", "reviews"),
             ("模型解釋", "model"),
-            ("重點摘要", "summary"),
-            ("推薦清單", "list"),
-            ("美食地圖", "map"),
             ("資料表", "data"),
         ]
     return [
         ("推薦概覽", "overview"),
+        ("食譜清單", "list"),
+        ("推薦操作", "actions"),
+        ("食材優先級", "priority"),
         ("決策儀表板", "dashboard"),
         ("模型評估", "evaluation"),
-        ("食材優先級", "priority"),
-        ("推薦操作", "actions"),
-        ("食譜清單", "list"),
         ("資料表", "data"),
     ]
 
@@ -3182,6 +3181,47 @@ if mode == "我要外食":
         surprise = result.sample(1, random_state=int(result["score"].sum() * 10)).iloc[0]
         st.success(f"今日驚喜推薦：{surprise['name']}｜推薦分數 {surprise['score']}｜{surprise['reason']}")
 
+    summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
+    summary_col1.metric("本次推薦筆數", len(result))
+    if result.empty:
+        summary_col2.metric("平均價格", "--")
+        summary_col3.metric("平均距離", "--")
+        summary_col4.metric("最高推薦分數", "--")
+    else:
+        summary_col2.metric("平均價格", f"{result['price'].mean():.0f} 元")
+        summary_col3.metric("平均距離", f"{result['distance'].mean():.1f} 分鐘")
+        summary_col4.metric("最高推薦分數", f"{result['score'].max():.1f}")
+
+    render_restaurant_highlights(result)
+
+    st.divider()
+    render_anchor("list")
+    render_section_kicker("推薦清單")
+    st.subheader(f"外食決策建議前 {top_n} 名")
+    if result.empty:
+        st.warning("目前條件太嚴格，沒有找到符合的餐廳。可以降低最低評分、放寬距離或調整餐點類型。")
+        render_restaurant_empty_guidance(
+            candidate_result,
+            evaluation_baseline,
+            {
+                "min_rating": min_rating,
+                "use_review_analysis": use_review_analysis,
+                "hide_high_risk": hide_high_risk,
+                "top_n": top_n,
+            },
+        )
+    for rank, (_, row) in enumerate(result.iterrows(), start=1):
+        render_restaurant_card(rank, row)
+
+    render_daily_fortune(build_restaurant_fortune(result, mood))
+    render_restaurant_comparison(result)
+
+    st.divider()
+    render_anchor("map")
+    render_restaurant_map(result, user_location)
+
+    st.divider()
+    render_section_kicker("進階分析")
     render_anchor("dashboard")
     render_restaurant_decision_dashboard(result, df, review_analysis, use_review_analysis)
 
@@ -3207,45 +3247,6 @@ if mode == "我要外食":
         review_weight,
     )
     render_restaurant_sensitivity_analysis(result)
-
-    render_anchor("summary")
-    summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
-    summary_col1.metric("本次推薦筆數", len(result))
-    if result.empty:
-        summary_col2.metric("平均價格", "--")
-        summary_col3.metric("平均距離", "--")
-        summary_col4.metric("最高推薦分數", "--")
-    else:
-        summary_col2.metric("平均價格", f"{result['price'].mean():.0f} 元")
-        summary_col3.metric("平均距離", f"{result['distance'].mean():.1f} 分鐘")
-        summary_col4.metric("最高推薦分數", f"{result['score'].max():.1f}")
-
-    render_restaurant_highlights(result)
-    render_daily_fortune(build_restaurant_fortune(result, mood))
-    render_restaurant_comparison(result)
-
-    st.divider()
-    render_anchor("list")
-    render_section_kicker("推薦清單")
-    st.subheader(f"外食決策建議前 {top_n} 名")
-    if result.empty:
-        st.warning("目前條件太嚴格，沒有找到符合的餐廳。可以降低最低評分、放寬距離或調整餐點類型。")
-        render_restaurant_empty_guidance(
-            candidate_result,
-            evaluation_baseline,
-            {
-                "min_rating": min_rating,
-                "use_review_analysis": use_review_analysis,
-                "hide_high_risk": hide_high_risk,
-                "top_n": top_n,
-            },
-        )
-    for rank, (_, row) in enumerate(result.iterrows(), start=1):
-        render_restaurant_card(rank, row)
-
-    st.divider()
-    render_anchor("map")
-    render_restaurant_map(result, user_location)
 
     render_anchor("data")
     with st.expander("查看完整餐廳資料表", expanded=False):
@@ -3394,14 +3395,24 @@ else:
             f"可信食譜內容覆蓋 {trusted_count}/{len(result)} 筆"
         )
 
-    render_anchor("dashboard")
-    render_recipe_decision_dashboard(result, recipes, current_ingredients, priority_profiles)
+    render_anchor("list")
+    render_section_kicker("推薦清單")
+    st.subheader(f"內食食譜決策建議前 {top_n} 名")
+    display_ingredients = "、".join(sorted(parse_ingredients(ingredient_text))) or "尚未輸入"
+    st.caption(f"目前食材：{display_ingredients}")
 
-    render_anchor("evaluation")
-    render_recipe_model_evaluation(evaluation_baseline, evaluation_enhanced, top_n, priority_profiles)
-
-    render_anchor("priority")
-    render_ingredient_priority_summary(priority_profiles)
+    if result.empty:
+        st.warning("目前條件太嚴格，沒有找到符合的食譜。可以提高熱量上限、增加可缺少食材數，或取消只顯示現有食材足夠。")
+        render_recipe_empty_guidance(
+            candidate_result,
+            {
+                "only_cookable": only_cookable,
+                "max_calories": max_calories,
+                "max_missing": max_missing,
+            },
+        )
+    for rank, (_, row) in enumerate(result.iterrows(), start=1):
+        render_recipe_card(rank, row)
 
     st.divider()
     render_anchor("actions")
@@ -3424,24 +3435,16 @@ else:
     render_recipe_comparison(result)
     render_shopping_list(result)
 
-    render_anchor("list")
-    render_section_kicker("推薦清單")
-    st.subheader(f"內食食譜決策建議前 {top_n} 名")
-    display_ingredients = "、".join(sorted(parse_ingredients(ingredient_text))) or "尚未輸入"
-    st.caption(f"目前食材：{display_ingredients}")
+    render_anchor("priority")
+    render_ingredient_priority_summary(priority_profiles)
 
-    if result.empty:
-        st.warning("目前條件太嚴格，沒有找到符合的食譜。可以提高熱量上限、增加可缺少食材數，或取消只顯示現有食材足夠。")
-        render_recipe_empty_guidance(
-            candidate_result,
-            {
-                "only_cookable": only_cookable,
-                "max_calories": max_calories,
-                "max_missing": max_missing,
-            },
-        )
-    for rank, (_, row) in enumerate(result.iterrows(), start=1):
-        render_recipe_card(rank, row)
+    st.divider()
+    render_section_kicker("進階分析")
+    render_anchor("dashboard")
+    render_recipe_decision_dashboard(result, recipes, current_ingredients, priority_profiles)
+
+    render_anchor("evaluation")
+    render_recipe_model_evaluation(evaluation_baseline, evaluation_enhanced, top_n, priority_profiles)
 
     render_anchor("data")
     with st.expander("查看完整食譜資料表", expanded=False):

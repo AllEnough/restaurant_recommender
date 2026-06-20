@@ -3,3 +3,9 @@ pandas
 folium
 streamlit-folium
 streamlit-js-eval
+fastapi
+uvicorn[standard]
+python-multipart
+numpy
+opencv-python-headless
+httpx

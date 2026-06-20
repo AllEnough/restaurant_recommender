@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #f7f5ef;
+  --color-paper: #ffffff;
+  --color-ink: #20272d;
+  --color-muted: #69737a;
+  --color-line: #dedbd2;
+  --color-coral: #dc5a3a;
+  --color-coral-dark: #a93620;
+  --color-leaf: #247a52;
+  --color-leaf-soft: #e8f5ed;
+  --color-sun: #e9ad35;
+  --font-sans: "Noto Sans TC", "PingFang TC", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; background: var(--color-canvas); color: var(--color-ink); }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+
+.hero-photo {
+  background-image: linear-gradient(rgba(21, 30, 27, .72), rgba(21, 30, 27, .72)), url("https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1800&q=82");
+  background-position: center 55%;
+  background-size: cover;
+}
+
+.range { accent-color: var(--color-coral); }
+.focus-ring:focus { outline: 3px solid rgba(220, 90, 58, .22); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .hero-photo { background-position: center; }
+}
