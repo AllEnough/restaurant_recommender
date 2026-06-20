@@ -30,6 +30,26 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .range { width: 100%; min-width: 0; accent-color: var(--color-coral); }
 .focus-ring:focus { outline: 3px solid rgba(220, 90, 58, .22); outline-offset: 2px; }
 
+.advanced-dashboard {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.advanced-dashboard > section {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.analysis-table-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .analysis-table {
   width: 100%;
   min-width: 620px;
@@ -90,4 +110,6 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 @media (max-width: 640px) {
   .hero-photo { background-position: center; }
   .restaurant-map { height: 360px; }
+  .analysis-table { min-width: 560px; font-size: .75rem; }
+  .analysis-table th, .analysis-table td { padding: .55rem .6rem; }
 }

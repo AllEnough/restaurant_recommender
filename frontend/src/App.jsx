@@ -206,7 +206,7 @@ function RestaurantAdvanced({ data }) {
   if (!analysis) return null;
   const dashboard = analysis.dashboard || {};
   const evaluation = analysis.evaluation || {};
-  return <div className="mt-5 grid gap-6">
+  return <div className="advanced-dashboard mt-5 grid min-w-0 gap-6">
     <section>
       <h3 className="text-base font-black">外食決策 Dashboard</h3>
       <p className="mt-1 text-sm text-muted">整理目前候選池、評論風險與增強模型輸出。</p>
@@ -227,7 +227,7 @@ function RestaurantAdvanced({ data }) {
         <Metric label="增強後平均負評" value={`${evaluation.enhanced_average_negative ?? 0}%`} tone="green"/>
         <Metric label="第一名是否改變" value={evaluation.first_changed ? "有改變" : "維持一致"} tone={evaluation.first_changed ? "orange" : "green"}/>
       </div>
-      <div className="mt-4 overflow-x-auto">
+      <div className="analysis-table-shell mt-4">
         <table className="analysis-table"><thead><tr><th>餐廳</th><th>基礎排名</th><th>增強排名</th><th>名次變化</th><th>基礎分</th><th>最終分</th><th>負評</th></tr></thead><tbody>{(evaluation.comparison || []).map((row) => <tr key={row.name}><td className="font-bold">{row.name}</td><td>{row.baseline_rank ?? "－"}</td><td>{row.enhanced_rank ?? "－"}</td><td><RankChange value={row.rank_change}/></td><td>{row.base_score}</td><td className="font-black text-coral">{row.final_score}</td><td>{row.negative_ratio}%</td></tr>)}</tbody></table>
       </div>
     </section>
@@ -243,7 +243,7 @@ function RestaurantAdvanced({ data }) {
     <section className="border-t border-line pt-5">
       <h3 className="text-base font-black">權重敏感度分析</h3>
       <p className="mt-1 text-sm text-muted">使用相同候選池，觀察不同決策目標下的第一名。</p>
-      <div className="mt-3 overflow-x-auto"><table className="analysis-table"><thead><tr><th>排序策略</th><th>第一名</th><th>指標值</th></tr></thead><tbody>{(analysis.sensitivity || []).map((row) => <tr key={row.strategy}><td>{row.strategy}</td><td className="font-black">{row.winner}</td><td>{row.value}</td></tr>)}</tbody></table></div>
+      <div className="analysis-table-shell mt-3"><table className="analysis-table"><thead><tr><th>排序策略</th><th>第一名</th><th>指標值</th></tr></thead><tbody>{(analysis.sensitivity || []).map((row) => <tr key={row.strategy}><td>{row.strategy}</td><td className="font-black">{row.winner}</td><td>{row.value}</td></tr>)}</tbody></table></div>
     </section>
   </div>;
 }
@@ -254,7 +254,7 @@ function RecipeAdvanced({ data }) {
   const dashboard = analysis.dashboard || {};
   const evaluation = analysis.evaluation || {};
   const coverage = analysis.knowledge_coverage || {};
-  return <div className="mt-5 grid gap-6">
+  return <div className="advanced-dashboard mt-5 grid min-w-0 gap-6">
     <section>
       <h3 className="text-base font-black">內食決策 Dashboard</h3>
       <p className="mt-1 text-sm text-muted">同時檢查可料理性、缺料與保存加權。</p>
@@ -268,7 +268,7 @@ function RecipeAdvanced({ data }) {
 
     <section className="border-t border-line pt-5">
       <h3 className="text-base font-black">食材標準化與保存優先順序</h3>
-      <div className="mt-3 overflow-x-auto"><table className="analysis-table"><thead><tr><th>食材</th><th>優先分數</th><th>剩餘天數</th><th>排程比值</th><th>風險級別</th><th>估計價格</th></tr></thead><tbody>{(analysis.priorities || []).map((row) => <tr key={row.ingredient}><td className="font-black">{row.ingredient}</td><td>{row.priority_score}</td><td>{row.remaining_days}</td><td>{row.scheduling_ratio}</td><td><span className={`font-black ${row.level === "高" ? "text-coral" : row.level === "中" ? "text-sun" : "text-leaf"}`}>{row.level}</span></td><td>{row.price} 元</td></tr>)}</tbody></table></div>
+      <div className="analysis-table-shell mt-3"><table className="analysis-table"><thead><tr><th>食材</th><th>優先分數</th><th>剩餘天數</th><th>排程比值</th><th>風險級別</th><th>估計價格</th></tr></thead><tbody>{(analysis.priorities || []).map((row) => <tr key={row.ingredient}><td className="font-black">{row.ingredient}</td><td>{row.priority_score}</td><td>{row.remaining_days}</td><td>{row.scheduling_ratio}</td><td><span className={`font-black ${row.level === "高" ? "text-coral" : row.level === "中" ? "text-sun" : "text-leaf"}`}>{row.level}</span></td><td>{row.price} 元</td></tr>)}</tbody></table></div>
       <div className="mt-3 flex flex-wrap gap-2 text-sm">{(analysis.normalization || []).map((row,index) => <span key={`${row.original}-${index}`} className="rounded border border-line bg-canvas px-3 py-1.5"><b>{row.original}</b>{row.changed ? ` → ${row.normalized}` : "（已標準化）"}</span>)}</div>
     </section>
 
@@ -280,7 +280,7 @@ function RecipeAdvanced({ data }) {
         <Metric label="增強後平均缺料" value={`${evaluation.enhanced_average_missing ?? 0} 項`} tone="green"/>
         <Metric label="高優先食材命中" value={`${evaluation.high_priority_usage ?? 0} 道`} tone="orange"/>
       </div>
-      <div className="mt-4 overflow-x-auto"><table className="analysis-table"><thead><tr><th>食譜</th><th>基礎排名</th><th>增強排名</th><th>名次變化</th><th>基礎分</th><th>最終分</th><th>缺料</th></tr></thead><tbody>{(evaluation.comparison || []).map((row) => <tr key={row.name}><td className="font-bold">{row.name}</td><td>{row.baseline_rank ?? "－"}</td><td>{row.enhanced_rank ?? "－"}</td><td><RankChange value={row.rank_change}/></td><td>{row.base_score}</td><td className="font-black text-leaf">{row.final_score}</td><td>{row.missing_count}</td></tr>)}</tbody></table></div>
+      <div className="analysis-table-shell mt-4"><table className="analysis-table"><thead><tr><th>食譜</th><th>基礎排名</th><th>增強排名</th><th>名次變化</th><th>基礎分</th><th>最終分</th><th>缺料</th></tr></thead><tbody>{(evaluation.comparison || []).map((row) => <tr key={row.name}><td className="font-bold">{row.name}</td><td>{row.baseline_rank ?? "－"}</td><td>{row.enhanced_rank ?? "－"}</td><td><RankChange value={row.rank_change}/></td><td>{row.base_score}</td><td className="font-black text-leaf">{row.final_score}</td><td>{row.missing_count}</td></tr>)}</tbody></table></div>
     </section>
 
     <section className="border-t border-line pt-5">
@@ -586,7 +586,7 @@ function App() {
             longitude={restaurantForm.longitude}
           />}
 
-          {results && <section className="mt-5 rounded-md border border-line bg-white p-4">
+          {results && <section className="mt-5 min-w-0 overflow-hidden rounded-md border border-line bg-white p-4">
             <button type="button" onClick={()=>setAnalysisOpen((open)=>!open)} className="flex w-full items-center justify-between gap-3 text-left font-black" aria-expanded={analysisOpen}>
               <span className="flex items-center gap-2"><BarChart3 size={18}/>進階分析與模型資訊</span>
               <ChevronDown size={18} className={`transition-transform ${analysisOpen ? "rotate-180" : ""}`}/>
