@@ -49,6 +49,27 @@ class RecipePipelineTest(unittest.TestCase):
         self.assertTrue((enriched["knowledge_status"] == "已檢索可信內容").all())
         self.assertTrue(enriched["knowledge_id"].str.startswith("KB-R").all())
 
+    def test_knowledge_schema_and_ingredients_match_recipe_data(self):
+        self.assertEqual(
+            list(self.knowledge.columns),
+            [
+                "ingredient",
+                "recipe_name",
+                "knowledge_id",
+                "steps",
+                "tips",
+                "source_name",
+                "verified_date",
+                "產地",
+                "有效期限",
+            ],
+        )
+        expected = self.recipes.set_index("name")["ingredients"]
+        actual = self.knowledge.set_index("recipe_name")["ingredient"]
+        self.assertEqual(actual.to_dict(), expected.to_dict())
+        self.assertTrue(self.knowledge["產地"].str.strip().ne("").all())
+        self.assertTrue(self.knowledge["有效期限"].str.strip().ne("").all())
+
 
 if __name__ == "__main__":
     unittest.main()

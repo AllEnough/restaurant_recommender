@@ -136,7 +136,7 @@ function RecipeCard({ row, rank, saved, onSave, canSave }) {
       <Metric label="保存加權" value={`+${row.priority_bonus || 0}`} tone="green" />
     </div>
     <p className="mt-4 border-l-4 border-coral bg-[#fff0eb] px-3 py-2 text-sm leading-6">{row.reason}</p>
-    <details className="mt-3 border-t border-line pt-3 text-sm"><summary className="flex cursor-pointer items-center gap-2 font-bold"><CookingPot size={16}/>料理步驟與可信來源</summary><ol className="mt-3 grid gap-2 pl-5 text-muted">{(row.steps || []).map((step, index) => <li className="list-decimal" key={index}>{step}</li>)}</ol><p className="mt-3 text-xs text-muted">{row.knowledge_id} · {row.source_name} · 審核 {row.verified_date}</p></details>
+    <details className="mt-3 border-t border-line pt-3 text-sm"><summary className="flex cursor-pointer items-center gap-2 font-bold"><CookingPot size={16}/>料理步驟與可信來源</summary><ol className="mt-3 grid gap-2 pl-5 text-muted">{(row.steps || []).map((step, index) => <li className="list-decimal" key={index}>{step}</li>)}</ol><div className="mt-3 grid gap-1 text-xs text-muted"><p>{row.knowledge_id} · {row.source_name} · 審核 {row.verified_date}</p><p>食材：{row.ingredient || row.ingredients}</p><p>產地：{row["產地"]} · 有效期限：{row["有效期限"]}</p></div></details>
   </article>;
 }
 

@@ -168,7 +168,7 @@ CSV datasets / SQLite / ONNX models
 
 ### 7.4 可信內容檢索
 
-排序後以食譜名稱連接 `recipe_knowledge.csv`，取得 `knowledge_id`、料理步驟、來源名稱與審核日期。目前為 RAG-ready 的可信檢索層，尚未串接 LLM，不宣稱已完成完整生成式 RAG。
+排序後以食譜名稱連接 `recipe_knowledge.csv`，取得食材、`knowledge_id`、料理步驟、提醒、來源名稱、審核日期、產地與有效期限。知識庫固定驗證九欄結構；無法驗證單一採購批次時，產地及期限只標示應依產品包裝與保存狀態判定，不虛構資料。目前為 RAG-ready 的可信檢索層，尚未串接 LLM，不宣稱已完成完整生成式 RAG。
 
 ## 八、演算法範例程式
 

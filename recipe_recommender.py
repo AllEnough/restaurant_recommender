@@ -159,7 +159,17 @@ def recall_recipe_candidates(df, user_ingredients):
 
 def load_recipe_knowledge(file_path="recipe_knowledge.csv"):
     knowledge = pd.read_csv(file_path, dtype=str).fillna("")
-    required_columns = {"recipe_name", "knowledge_id", "steps", "source_name", "verified_date"}
+    required_columns = {
+        "ingredient",
+        "recipe_name",
+        "knowledge_id",
+        "steps",
+        "tips",
+        "source_name",
+        "verified_date",
+        "產地",
+        "有效期限",
+    }
     missing = required_columns - set(knowledge.columns)
     if missing:
         raise ValueError(f"食譜知識庫缺少欄位：{', '.join(sorted(missing))}")
