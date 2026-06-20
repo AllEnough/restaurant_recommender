@@ -8,6 +8,33 @@ DIFFICULTY_SCORE = {
 }
 
 
+INGREDIENT_ALIASES = {
+    "蛋": "雞蛋",
+    "雞蛋液": "雞蛋",
+    "青蔥": "蔥",
+    "蔥花": "蔥",
+    "青菜葉": "青菜",
+    "葉菜": "青菜",
+    "高麗": "高麗菜",
+    "洋芋": "馬鈴薯",
+    "土豆": "馬鈴薯",
+    "紅蘿蔔絲": "紅蘿蔔",
+    "胡蘿蔔": "紅蘿蔔",
+    "蕃茄": "番茄",
+    "豬肉片": "豬肉",
+    "豬肉絲": "豬肉",
+    "雞胸": "雞胸肉",
+    "白米飯": "白飯",
+    "米飯": "白飯",
+    "意麵": "義大利麵",
+}
+
+
+def normalize_ingredient(value):
+    ingredient = str(value).strip().lower()
+    return INGREDIENT_ALIASES.get(ingredient, ingredient)
+
+
 def load_recipes(file_path="recipes.csv"):
     df = pd.read_csv(file_path)
     numeric_columns = ["missing_allowed", "time", "calories"]
@@ -23,7 +50,29 @@ def parse_ingredients(text):
     normalized = str(text)
     for separator in separators[1:]:
         normalized = normalized.replace(separator, separators[0])
-    return {item.strip() for item in normalized.split(",") if item.strip()}
+    return {normalize_ingredient(item) for item in normalized.split(",") if item.strip()}
+
+
+def get_ingredient_normalization_report(text):
+    if not text:
+        return []
+    separators = [",", "，", "、", " ", "\n"]
+    raw_text = str(text)
+    for separator in separators[1:]:
+        raw_text = raw_text.replace(separator, separators[0])
+
+    report = []
+    seen = set()
+    for raw_item in raw_text.split(","):
+        original = raw_item.strip()
+        if not original:
+            continue
+        normalized = normalize_ingredient(original)
+        key = (original, normalized)
+        if key not in seen:
+            report.append({"original": original, "normalized": normalized, "changed": original.lower() != normalized})
+            seen.add(key)
+    return report
 
 
 def collect_ingredient_options(df):
@@ -79,14 +128,52 @@ def calculate_recipe_score(row, user_ingredients, max_time, difficulty_preferenc
     if max_calories is not None and row["calories"] <= max_calories:
         reasons.append("熱量符合需求")
 
-    return (
-        round(max(score, 0), 2),
-        "、".join(reasons),
-        "、".join(matched),
-        "、".join(missing),
-        len(matched),
-        len(missing),
+    return {
+        "score": round(max(score, 0), 2),
+        "reason": "、".join(reasons),
+        "matched_ingredients": "、".join(matched),
+        "missing_ingredients": "、".join(missing),
+        "matched_count": len(matched),
+        "missing_count": len(missing),
+        "recall_score": round(match_ratio * 100, 1),
+        "ingredient_score": round(ingredient_score, 1),
+        "time_score": round(time_score, 1),
+        "difficulty_score": round(difficulty_score, 1),
+        "calorie_score": round(calorie_score, 1),
+        "missing_penalty": round(missing_penalty, 1),
+    }
+
+
+def recall_recipe_candidates(df, user_ingredients):
+    candidates = df.copy()
+    candidates["recall_matches"] = candidates["ingredients"].apply(
+        lambda value: len(parse_ingredients(value) & user_ingredients)
     )
+    if user_ingredients and (candidates["recall_matches"] > 0).any():
+        candidates = candidates[candidates["recall_matches"] > 0]
+        candidates["recall_strategy"] = "標準化食材交集召回"
+    else:
+        candidates["recall_strategy"] = "條件式全庫備援召回"
+    return candidates
+
+
+def load_recipe_knowledge(file_path="recipe_knowledge.csv"):
+    knowledge = pd.read_csv(file_path, dtype=str).fillna("")
+    required_columns = {"recipe_name", "knowledge_id", "steps", "source_name", "verified_date"}
+    missing = required_columns - set(knowledge.columns)
+    if missing:
+        raise ValueError(f"食譜知識庫缺少欄位：{', '.join(sorted(missing))}")
+    return knowledge
+
+
+def attach_recipe_knowledge(results, knowledge):
+    if results.empty:
+        return results.copy()
+    enriched = results.merge(knowledge, how="left", left_on="name", right_on="recipe_name")
+    enriched["knowledge_status"] = enriched["knowledge_id"].apply(
+        lambda value: "已檢索可信內容" if str(value).strip() else "缺少可信內容"
+    )
+    return enriched.drop(columns=["recipe_name"], errors="ignore")
 
 
 def recommend_recipes(
@@ -100,19 +187,29 @@ def recommend_recipes(
     only_cookable=False,
 ):
     user_ingredients = parse_ingredients(ingredient_text)
-    results = df.copy()
+    results = recall_recipe_candidates(df, user_ingredients)
 
     scores = results.apply(
         lambda row: calculate_recipe_score(row, user_ingredients, max_time, difficulty_preference, max_calories),
         axis=1,
     )
 
-    results["score"] = scores.apply(lambda value: value[0])
-    results["reason"] = scores.apply(lambda value: value[1])
-    results["matched_ingredients"] = scores.apply(lambda value: value[2])
-    results["missing_ingredients"] = scores.apply(lambda value: value[3])
-    results["matched_count"] = scores.apply(lambda value: value[4])
-    results["missing_count"] = scores.apply(lambda value: value[5])
+    score_columns = [
+        "score",
+        "reason",
+        "matched_ingredients",
+        "missing_ingredients",
+        "matched_count",
+        "missing_count",
+        "recall_score",
+        "ingredient_score",
+        "time_score",
+        "difficulty_score",
+        "calorie_score",
+        "missing_penalty",
+    ]
+    for column in score_columns:
+        results[column] = scores.apply(lambda value, key=column: value[key])
 
     if max_calories is not None:
         results = results[results["calories"] <= max_calories]
@@ -121,7 +218,10 @@ def recommend_recipes(
     if only_cookable:
         results = results[results["missing_count"] == 0]
 
-    results = results.sort_values(by=["score", "matched_count", "time"], ascending=[False, False, True])
+    results = results.sort_values(
+        by=["score", "recall_score", "matched_count", "time"],
+        ascending=[False, False, False, True],
+    )
     return results.head(top_n)
 
 

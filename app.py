@@ -20,7 +20,15 @@ from recommender import (
     load_data,
     recommend_restaurants,
 )
-from recipe_recommender import collect_ingredient_options, load_recipes, parse_ingredients, recommend_recipes
+from recipe_recommender import (
+    attach_recipe_knowledge,
+    collect_ingredient_options,
+    get_ingredient_normalization_report,
+    load_recipe_knowledge,
+    load_recipes,
+    parse_ingredients,
+    recommend_recipes,
+)
 from review_analyzer import analyze_reviews, load_reviews, merge_review_analysis
 from weather_service import fetch_current_weather
 
@@ -2857,9 +2865,25 @@ def render_recipe_card(rank, row):
         info_col3.write(f"缺少食材：{row['missing_ingredients'] or '無'}")
         info_col4.write(f"符合數：{row['matched_count']}")
         info_col4.write(f"缺少數：{row['missing_count']}")
+        info_col4.write(f"召回相似度：{row.get('recall_score', 0):.0f}%")
         if row.get("priority_ingredients", ""):
             info_col4.write(f"優先食材：{row['priority_ingredients']}")
         render_reason(row["reason"])
+
+        with st.expander("料理步驟與可信內容來源", expanded=False):
+            if row.get("knowledge_status") != "已檢索可信內容":
+                st.warning("此食譜目前沒有通過審核的料理內容，系統不會自行生成步驟。")
+            else:
+                st.caption(
+                    f"檢索狀態：{row['knowledge_status']}｜內容編號：{row['knowledge_id']}｜"
+                    f"審核日期：{row['verified_date']}"
+                )
+                for step_number, step in enumerate(str(row["steps"]).split("|"), start=1):
+                    if step.strip():
+                        st.write(f"{step_number}. {step.strip()}")
+                if row.get("tips"):
+                    st.info(f"料理提醒：{row['tips']}")
+                st.caption(f"內容來源：{row['source_name']}。輸出僅整理檢索內容，不額外編造料理步驟。")
 
 
 if mode == "我要外食":
@@ -3229,6 +3253,7 @@ if mode == "我要外食":
 
 else:
     recipes = load_recipes("recipes.csv")
+    recipe_knowledge = load_recipe_knowledge("recipe_knowledge.csv")
 
     st.sidebar.header("內食條件")
     st.sidebar.caption("先選料理情境，再輸入冰箱食材；系統會把可料理性與食材保存優先級一起納入推薦。")
@@ -3267,6 +3292,15 @@ else:
     )
     ingredient_text = ",".join(selected_ingredients + [custom_ingredients])
     current_ingredients = sorted(parse_ingredients(ingredient_text))
+    normalization_report = get_ingredient_normalization_report(ingredient_text)
+    normalized_changes = [item for item in normalization_report if item["changed"]]
+    if normalized_changes:
+        change_text = "、".join(
+            f"{item['original']}→{item['normalized']}" for item in normalized_changes
+        )
+        st.sidebar.caption(f"食材名稱已標準化：{change_text}")
+    elif current_ingredients:
+        st.sidebar.caption(f"食材名稱標準化完成：共 {len(current_ingredients)} 種食材")
     priority_profiles = render_ingredient_priority_inputs(current_ingredients)
 
     with st.sidebar.expander("進階條件", expanded=False):
@@ -3323,6 +3357,7 @@ else:
         max_missing,
         only_cookable,
     )
+    candidate_result = attach_recipe_knowledge(candidate_result, recipe_knowledge)
     result = apply_ingredient_priority_to_recipes(candidate_result, priority_profiles)
     result = apply_recipe_preference_learning(result, recipes).head(top_n)
     evaluation_baseline = candidate_result.copy()
@@ -3336,7 +3371,7 @@ else:
     render_anchor("overview")
     render_section_kicker("內食決策")
     st.markdown(
-        '<div class="soft-note">系統會依照冰箱食材、料理時間、熱量與食材保存狀態，優先推薦更適合先做的食譜。</div>',
+        '<div class="soft-note">系統會先標準化食材名稱並召回候選食譜，再結合食材符合度、料理限制、保存優先級與偏好完成混合排序。</div>',
         unsafe_allow_html=True,
     )
     render_recipe_decision_summary(result, recipe_smart_mode, current_ingredients)
@@ -3352,6 +3387,12 @@ else:
         summary_col2.metric("平均時間", f"{result['time'].mean():.0f} 分鐘")
         summary_col3.metric("平均熱量", f"{result['calories'].mean():.0f} kcal")
         summary_col4.metric("最高分數", f"{result['final_score'].max():.1f}")
+        recall_strategy = result.iloc[0].get("recall_strategy", "食材條件召回")
+        trusted_count = int((result["knowledge_status"] == "已檢索可信內容").sum())
+        st.caption(
+            f"候選召回：{recall_strategy}｜目前結果 {len(result)} 筆｜"
+            f"可信食譜內容覆蓋 {trusted_count}/{len(result)} 筆"
+        )
 
     render_anchor("dashboard")
     render_recipe_decision_dashboard(result, recipes, current_ingredients, priority_profiles)
