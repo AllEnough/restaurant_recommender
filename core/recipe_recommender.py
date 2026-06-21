@@ -10,7 +10,7 @@ from core.recipe_rank import (
 )
 
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+DATASET_DIR = Path(__file__).resolve().parents[1] / "datasets"
 
 
 def normalize_ingredient(value):
@@ -18,7 +18,7 @@ def normalize_ingredient(value):
 
 
 def load_recipes(file_path=None):
-    file_path = Path(file_path) if file_path else DATA_DIR / "recipes.csv"
+    file_path = Path(file_path) if file_path else DATASET_DIR / "recipes.csv"
     df = pd.read_csv(file_path)
     numeric_columns = ["missing_allowed", "time", "calories"]
     for column in numeric_columns:
@@ -122,7 +122,7 @@ def recall_recipe_candidates(df, user_ingredients):
 
 
 def load_recipe_knowledge(file_path=None):
-    file_path = Path(file_path) if file_path else DATA_DIR / "recipe_knowledge.csv"
+    file_path = Path(file_path) if file_path else DATASET_DIR / "recipe_knowledge.csv"
     knowledge = pd.read_csv(file_path, dtype=str).fillna("")
     required_columns = {
         "ingredient",

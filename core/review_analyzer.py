@@ -10,7 +10,7 @@ from core.review_score import (
 )
 
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+DATASET_DIR = Path(__file__).resolve().parents[1] / "datasets"
 
 POSITIVE_WORDS = set(positive_words)
 NEGATIVE_WORDS = set(negative_words)
@@ -25,7 +25,7 @@ TOPIC_KEYWORDS = {
 
 
 def load_reviews(file_path=None):
-    file_path = Path(file_path) if file_path else DATA_DIR / "reviews.csv"
+    file_path = Path(file_path) if file_path else DATASET_DIR / "reviews.csv"
     try:
         reviews = pd.read_csv(file_path)
     except FileNotFoundError:

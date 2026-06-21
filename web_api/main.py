@@ -20,7 +20,7 @@ from web_api.services import (
 )
 
 
-app = FastAPI(title="智慧飲食決策系統 API", version="2.1.0")
+app = FastAPI(title="智慧飲食決策系統 API", version="2.1.1")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
