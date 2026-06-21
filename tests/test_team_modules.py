@@ -1,10 +1,10 @@
 import unittest
 from types import SimpleNamespace
 
-from ingredient import calculate_priority as core_calculate_priority
-from recipe_rank import parse_user_ingredients, recommend_recipes as core_recommend_recipes
-from review_analyzer import analyze_reviews
-from review_score import analyze_restaurant_reviews
+from core.ingredient import calculate_priority as core_calculate_priority
+from core.recipe_rank import parse_user_ingredients, recommend_recipes as core_recommend_recipes
+from core.review_analyzer import analyze_reviews
+from core.review_score import analyze_restaurant_reviews
 from web_api.services import calculate_priority
 
 import pandas as pd

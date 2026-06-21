@@ -1,4 +1,9 @@
+from pathlib import Path
+
 import pandas as pd
+
+
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
 WEIGHTS = {
@@ -37,7 +42,8 @@ SORT_COLUMNS = {
 }
 
 
-def load_data(file_path="restaurants.csv"):
+def load_data(file_path=None):
+    file_path = Path(file_path) if file_path else DATA_DIR / "restaurants.csv"
     df = pd.read_csv(file_path)
     numeric_columns = ["price", "rating", "distance", "spicy_level"]
     for optional_column in ["latitude", "longitude"]:

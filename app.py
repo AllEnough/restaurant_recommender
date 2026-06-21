@@ -13,14 +13,14 @@ try:
 except ImportError:
     get_geolocation = None
 
-from recommender import (
+from core.recommender import (
     calculate_score_breakdown,
     get_meal_time_strategy,
     get_mood_strategy,
     load_data,
     recommend_restaurants,
 )
-from recipe_recommender import (
+from core.recipe_recommender import (
     attach_recipe_knowledge,
     collect_ingredient_options,
     get_ingredient_normalization_report,
@@ -29,8 +29,8 @@ from recipe_recommender import (
     parse_ingredients,
     recommend_recipes,
 )
-from review_analyzer import analyze_reviews, load_reviews, merge_review_analysis
-from weather_service import fetch_current_weather
+from core.review_analyzer import analyze_reviews, load_reviews, merge_review_analysis
+from core.weather_service import fetch_current_weather
 
 st.set_page_config(page_title="智慧飲食決策系統", layout="wide")
 
@@ -2886,8 +2886,8 @@ def render_recipe_card(rank, row):
 
 
 if mode == "我要外食":
-    df = load_data("restaurants.csv")
-    review_analysis = analyze_reviews(load_reviews("reviews.csv"))
+    df = load_data()
+    review_analysis = analyze_reviews(load_reviews())
 
     st.sidebar.header("外食條件")
     st.sidebar.caption("先選使用情境，系統會自動帶入常用條件；需要更細再展開進階條件。")
@@ -3253,8 +3253,8 @@ if mode == "我要外食":
         st.dataframe(df, width="stretch")
 
 else:
-    recipes = load_recipes("recipes.csv")
-    recipe_knowledge = load_recipe_knowledge("recipe_knowledge.csv")
+    recipes = load_recipes()
+    recipe_knowledge = load_recipe_knowledge()
 
     st.sidebar.header("內食條件")
     st.sidebar.caption("先選料理情境，再輸入冰箱食材；系統會把可料理性與食材保存優先級一起納入推薦。")

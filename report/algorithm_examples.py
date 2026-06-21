@@ -10,9 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ingredient import calculate_priority
-from recipe_rank import recommend_recipes
-from review_score import analyze_restaurant_reviews
+from core.ingredient import calculate_priority
+from core.recipe_rank import recommend_recipes
+from core.review_score import analyze_restaurant_reviews
 
 
 def print_rows(title: str, rows: list[dict], score_key: str) -> None:

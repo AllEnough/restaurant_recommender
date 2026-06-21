@@ -1,11 +1,16 @@
+from pathlib import Path
+
 import pandas as pd
 
-from review_score import (
+from core.review_score import (
     analyze_one_review as core_analyze_one_review,
     analyze_restaurant_reviews,
     negative_words,
     positive_words,
 )
+
+
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 POSITIVE_WORDS = set(positive_words)
 NEGATIVE_WORDS = set(negative_words)
@@ -19,7 +24,8 @@ TOPIC_KEYWORDS = {
 }
 
 
-def load_reviews(file_path="reviews.csv"):
+def load_reviews(file_path=None):
+    file_path = Path(file_path) if file_path else DATA_DIR / "reviews.csv"
     try:
         reviews = pd.read_csv(file_path)
     except FileNotFoundError:

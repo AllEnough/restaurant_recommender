@@ -91,11 +91,11 @@ CSV datasets / SQLite / ONNX models
 
 ### 5.2 評論分析
 
-系統以正負關鍵字分析 `reviews.csv`：
+系統以正負關鍵字分析 `data/reviews.csv`：
 
 ```text
-評論情緒分數 = 50 + 關鍵字淨分 × 8 + 正評數 × 4 - 負評數 × 6
-評論調整 = (情緒分數 - 50) × 0.16 - 負評比例 × 0.08
+評論情緒分數 = 50 + 關鍵字淨分 × 10
+評論調整 = (情緒分數 - 50) × 0.12 - 負評比例 × 0.08
 ```
 
 評論情緒分數限制於 0 至 100，評論調整限制於 -12 至 10，再乘上使用者設定的評論權重。
@@ -168,7 +168,7 @@ CSV datasets / SQLite / ONNX models
 
 ### 7.4 可信內容檢索
 
-候選召回後以食譜名稱連接 `recipe_knowledge.csv`，取得食材、`knowledge_id`、料理步驟、提醒、來源名稱、審核日期、產地與有效期限。知識庫固定驗證九欄結構、內容編號與食譜唯一性；缺少內容編號、步驟、來源或審核日期的候選會在排序前被排除。無法驗證單一採購批次時，產地及期限只標示應依產品包裝與保存狀態判定，不虛構資料。目前為具嚴格來源約束的 RAG-ready 檢索層，尚未串接 LLM，不宣稱已完成完整生成式 RAG。
+候選召回後以食譜名稱連接 `data/recipe_knowledge.csv`，取得食材、`knowledge_id`、料理步驟、提醒、來源名稱、審核日期、產地與有效期限。知識庫固定驗證九欄結構、內容編號與食譜唯一性；缺少內容編號、步驟、來源或審核日期的候選會在排序前被排除。無法驗證單一採購批次時，產地及期限只標示應依產品包裝與保存狀態判定，不虛構資料。目前為具嚴格來源約束的 RAG-ready 檢索層，尚未串接 LLM，不宣稱已完成完整生成式 RAG。
 
 ## 八、演算法範例程式
 
@@ -178,9 +178,9 @@ CSV datasets / SQLite / ONNX models
 python3 report/algorithm_examples.py
 ```
 
-完整程式位於 `report/algorithm_examples.py`，它直接匯入正式系統使用的 `review_score.py`、`recipe_rank.py` 與 `ingredient.py`，不另外複製公式。
+完整程式位於 `report/algorithm_examples.py`，它直接匯入正式系統使用的 `core/review_score.py`、`core/recipe_rank.py` 與 `core/ingredient.py`，不另外複製公式。
 
-### 8.1 評論風險分數（`review_score.py`）
+### 8.1 評論風險分數（`core/review_score.py`）
 
 ```python
 sentiment_score = max(0, min(100, 50 + total_raw_score * 10))
@@ -206,7 +206,7 @@ scheduling_ratio = price / (remaining_days + 1)
 
 講解重點：剩餘天數放在分母，因此越接近過期，排程比值越高；價格與易腐程度代表食材被浪費時的成本。
 
-### 8.3 食譜基礎排序（`recipe_rank.py`）
+### 8.3 食譜基礎排序（`core/recipe_rank.py`）
 
 ```python
 base_score = (
@@ -218,7 +218,7 @@ base_score = (
 )
 ```
 
-講解重點：`recipe_rank.py` 先回答「這道食譜適不適合」；正式 API 再把 `ingredient.py` 的優先分數轉成保存加權，回答「現在是否應該先煮」。
+講解重點：`core/recipe_rank.py` 先回答「這道食譜適不適合」；正式 API 再把 `core/ingredient.py` 的優先分數轉成保存加權，回答「現在是否應該先煮」。
 
 ### 8.4 報告展示方式
 

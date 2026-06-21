@@ -104,7 +104,7 @@ SQLite 資料表：
 ## 七、技術含量
 
 - 多來源特徵整合與可解釋加權推薦。
-- 三個可獨立執行且由正式 API 直接匯入的核心：`review_score.py`、`recipe_rank.py`、`ingredient.py`。
+- 三個可獨立執行且由正式 API 直接匯入的核心：`core/review_score.py`、`core/recipe_rank.py`、`core/ingredient.py`。
 - 評論文字規則分析、負評風險與排名調整。
 - Haversine 空間距離與瀏覽器定位。
 - 食材標準化、集合召回與混合排序。

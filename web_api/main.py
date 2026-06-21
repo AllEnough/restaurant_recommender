@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from weather_service import fetch_current_weather
+from core.weather_service import fetch_current_weather
 from web_api.auth import favorite_router, router as auth_router
 from web_api.emotion import router as emotion_router
 from web_api.services import (

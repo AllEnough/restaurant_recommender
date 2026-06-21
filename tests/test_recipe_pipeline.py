@@ -1,6 +1,6 @@
 import unittest
 
-from recipe_recommender import (
+from core.recipe_recommender import (
     attach_recipe_knowledge,
     get_ingredient_normalization_report,
     load_recipe_knowledge,
@@ -12,8 +12,8 @@ from recipe_recommender import (
 class RecipePipelineTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.recipes = load_recipes("recipes.csv")
-        cls.knowledge = load_recipe_knowledge("recipe_knowledge.csv")
+        cls.recipes = load_recipes()
+        cls.knowledge = load_recipe_knowledge()
 
     def test_ingredient_aliases_are_normalized(self):
         report = get_ingredient_normalization_report("蛋, 青蔥, 蕃茄")

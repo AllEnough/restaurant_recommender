@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from ingredient import calculate_priority as core_calculate_priority
-from recommender import load_data, recommend_restaurants
-from recipe_rank import normalize_ingredient as normalize_core_ingredient
-from recipe_recommender import (
+from core.ingredient import calculate_priority as core_calculate_priority
+from core.recommender import load_data, recommend_restaurants
+from core.recipe_rank import normalize_ingredient as normalize_core_ingredient
+from core.recipe_recommender import (
     attach_recipe_knowledge,
     collect_ingredient_options,
     get_ingredient_normalization_report,
@@ -17,7 +17,7 @@ from recipe_recommender import (
     parse_ingredients,
     recommend_recipes,
 )
-from review_analyzer import analyze_reviews, load_reviews, merge_review_analysis
+from core.review_analyzer import analyze_reviews, load_reviews, merge_review_analysis
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -274,7 +274,7 @@ def apply_intent_adjustment(result: pd.DataFrame, intent: str) -> pd.DataFrame:
 
 
 def restaurant_options() -> dict:
-    restaurants = load_data(ROOT / "restaurants.csv")
+    restaurants = load_data(ROOT / "data" / "restaurants.csv")
     return {
         "categories": sorted(restaurants["category"].unique().tolist()),
         "scenarios": list(RESTAURANT_SCENARIOS),
@@ -284,7 +284,7 @@ def restaurant_options() -> dict:
 
 def recommend_restaurant_payload(payload) -> dict:
     restaurants = apply_location(
-        load_data(ROOT / "restaurants.csv"), payload.latitude, payload.longitude
+        load_data(ROOT / "data" / "restaurants.csv"), payload.latitude, payload.longitude
     )
     scenario = RESTAURANT_SCENARIOS.get(payload.scenario, RESTAURANT_SCENARIOS["手動自訂"])
     candidate_data = restaurants
@@ -307,7 +307,7 @@ def recommend_restaurant_payload(payload) -> dict:
         payload.min_rating,
         payload.meal_time,
     )
-    reviews = analyze_reviews(load_reviews(ROOT / "reviews.csv"))
+    reviews = analyze_reviews(load_reviews(ROOT / "data" / "reviews.csv"))
     result = merge_review_analysis(candidates, reviews)
     if payload.use_review_analysis:
         result = result[result["negative_ratio"] <= payload.max_negative_ratio]
@@ -369,7 +369,7 @@ def apply_recipe_priority(result: pd.DataFrame, profiles: dict[str, dict]) -> pd
 
 
 def recipe_options() -> dict:
-    recipes = load_recipes(ROOT / "recipes.csv")
+    recipes = load_recipes(ROOT / "data" / "recipes.csv")
     return {
         "ingredients": collect_ingredient_options(recipes),
         "scenarios": list(RECIPE_SCENARIOS),
@@ -378,7 +378,7 @@ def recipe_options() -> dict:
 
 
 def recommend_recipe_payload(payload) -> dict:
-    recipes = load_recipes(ROOT / "recipes.csv")
+    recipes = load_recipes(ROOT / "data" / "recipes.csv")
     ingredient_text = ",".join(item.name for item in payload.ingredients)
     max_time = payload.max_time
     max_calories = payload.max_calories
@@ -401,7 +401,9 @@ def recommend_recipe_payload(payload) -> dict:
         only_cookable,
     )
     recalled_count = len(result)
-    result = attach_recipe_knowledge(result, load_recipe_knowledge(ROOT / "recipe_knowledge.csv"))
+    result = attach_recipe_knowledge(
+        result, load_recipe_knowledge(ROOT / "data" / "recipe_knowledge.csv")
+    )
     knowledge_excluded_count = recalled_count - len(result)
     baseline = result.sort_values(by=["score", "recall_score", "matched_count", "time"], ascending=[False, False, False, True]).reset_index(drop=True)
     priority_rows = [calculate_priority(item) for item in payload.ingredients]
