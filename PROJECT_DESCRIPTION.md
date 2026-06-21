@@ -95,8 +95,8 @@ SQLite 資料表：
 1. 瀏覽器取得相機畫面。
 2. 使用者主動拍照後，上傳單張 JPEG 至 FastAPI。
 3. YuNet 偵測臉部與五個關鍵點。
-4. 對齊臉部並交由 MobileFaceNet 表情模型分類。
-5. 將 angry、disgust、fearful、happy、neutral、sad、surprised 映射成推薦心情。
+4. 對齊臉部、轉為 64 × 64 灰階影像，再交由 FER+ CNN 分類。
+5. 將 neutral、happiness、surprise、sadness、anger、disgust、fear、contempt 映射成推薦心情。
 6. 使用者確認或手動修改後再進行推薦。
 
 系統不保存影像，並明確標示這不是心理或醫療評估。
@@ -109,7 +109,7 @@ SQLite 資料表：
 - 食材標準化、集合召回與混合排序。
 - 保存期限／浪費成本導向的排程加權。
 - 具有九欄結構（食材、食譜、內容編號、步驟、提醒、來源、審核日、產地、有效期限）的可信食譜檢索層。
-- OpenCV DNN、ONNX 人臉偵測與表情分類。
+- OpenCV DNN、YuNet 人臉偵測與 ONNX FER+ 八分類。
 - REST API、Cookie Session、密碼雜湊與資料庫關聯。
 - React 狀態管理、相機 API、登入流程與響應式介面。
 - Docker 多階段建置與 Railway 持久化 Volume。

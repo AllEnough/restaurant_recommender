@@ -6,7 +6,7 @@
 
 ## 摘要
 
-本專題針對「外食選擇困難」與「冰箱食材浪費」兩種問題，建立可部署的智慧飲食決策系統。外食模組整合價格、距離、評分、天氣、時段、心情與評論風險；內食模組先標準化食材，再進行候選召回、混合排序與可信食譜內容檢索。系統使用 React 與 Tailwind CSS 建立前端、FastAPI 提供推薦及帳號 API、SQLite 保存使用者與收藏，並以 OpenCV YuNet 與 MobileFaceNet 將表情轉換成可手動覆寫的推薦情境。系統已部署至 Railway，並以自動測試及實際操作驗證主要流程。
+本專題針對「外食選擇困難」與「冰箱食材浪費」兩種問題，建立可部署的智慧飲食決策系統。外食模組整合價格、距離、評分、天氣、時段、心情與評論風險；內食模組先標準化食材，再進行候選召回、混合排序與可信食譜內容檢索。系統使用 React 與 Tailwind CSS 建立前端、FastAPI 提供推薦及帳號 API、SQLite 保存使用者與收藏，並以 OpenCV YuNet 與 FER+ 八分類模型將表情轉換成可手動覆寫的推薦情境。系統已部署至 Railway，並以自動測試及實際操作驗證主要流程。
 
 ## 一、研究背景與動機
 
@@ -128,7 +128,7 @@ CSV datasets / SQLite / ONNX models
 1. 使用者主動開啟相機並拍攝單張影像。
 2. YuNet 偵測臉部與五個關鍵點。
 3. 依關鍵點將臉部對齊為 112 × 112。
-4. MobileFaceNet 分類 angry、disgust、fearful、happy、neutral、sad、surprised。
+4. FER+ CNN 分類 neutral、happiness、surprise、sadness、anger、disgust、fear、contempt。
 5. 將結果映射到開心、疲累、心情不好或選擇困難。
 6. 使用者確認或手動修改後，再送入外食模型。
 

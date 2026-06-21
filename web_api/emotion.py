@@ -10,25 +10,27 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 ROOT = Path(__file__).resolve().parent.parent
 FACE_MODEL = ROOT / "models" / "face_detection_yunet_2023mar.onnx"
-EMOTION_MODEL = ROOT / "models" / "facial_expression_recognition_mobilefacenet_2022july.onnx"
-EXPRESSIONS = ["angry", "disgust", "fearful", "happy", "neutral", "sad", "surprised"]
+EMOTION_MODEL = ROOT / "models" / "emotion-ferplus-8.onnx"
+EXPRESSIONS = ["neutral", "happiness", "surprise", "sadness", "anger", "disgust", "fear", "contempt"]
 EXPRESSION_LABELS = {
-    "angry": "生氣",
-    "disgust": "厭惡",
-    "fearful": "緊張",
-    "happy": "開心",
     "neutral": "平靜",
-    "sad": "難過",
-    "surprised": "驚訝",
+    "happiness": "開心",
+    "surprise": "驚訝",
+    "sadness": "難過",
+    "anger": "生氣",
+    "disgust": "厭惡",
+    "fear": "緊張",
+    "contempt": "輕蔑",
 }
 MOOD_MAPPING = {
-    "angry": "心情不好",
-    "disgust": "心情不好",
-    "fearful": "疲累",
-    "happy": "開心",
     "neutral": "選擇困難",
-    "sad": "心情不好",
-    "surprised": "開心",
+    "happiness": "開心",
+    "surprise": "開心",
+    "sadness": "心情不好",
+    "anger": "心情不好",
+    "disgust": "心情不好",
+    "fear": "疲累",
+    "contempt": "心情不好",
 }
 STANDARD_POINTS = np.array(
     [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]],
@@ -47,7 +49,7 @@ def load_models():
         if not FACE_MODEL.exists() or not EMOTION_MODEL.exists():
             raise RuntimeError("OpenCV 表情辨識模型尚未安裝")
         face_detector = cv2.FaceDetectorYN.create(str(FACE_MODEL), "", (320, 320), 0.8, 0.3, 5000)
-        emotion_network = cv2.dnn.readNet(str(EMOTION_MODEL))
+        emotion_network = cv2.dnn.readNetFromONNX(str(EMOTION_MODEL))
     return face_detector, emotion_network
 
 
@@ -64,6 +66,18 @@ def softmax(values: np.ndarray) -> np.ndarray:
     return exponent / np.sum(exponent)
 
 
+def predict_expression(network: cv2.dnn.Net, aligned_face: np.ndarray) -> tuple[str, float, dict[str, float]]:
+    gray = cv2.cvtColor(aligned_face, cv2.COLOR_BGR2GRAY)
+    resized = cv2.resize(gray, (64, 64), interpolation=cv2.INTER_AREA).astype(np.float32)
+    network.setInput(resized.reshape(1, 1, 64, 64))
+    probabilities = softmax(network.forward().reshape(-1))
+    if len(probabilities) != len(EXPRESSIONS):
+        raise RuntimeError(f"FER+ 模型輸出類別數不符：{len(probabilities)}")
+    index = int(np.argmax(probabilities))
+    scores = {label: round(float(probabilities[i]), 4) for i, label in enumerate(EXPRESSIONS)}
+    return EXPRESSIONS[index], float(probabilities[index]), scores
+
+
 def analyze_image(image: np.ndarray) -> dict:
     detector, network = load_models()
     height, width = image.shape[:2]
@@ -77,15 +91,7 @@ def analyze_image(image: np.ndarray) -> dict:
 
     face = max(faces, key=lambda item: float(item[2] * item[3]))
     aligned = align_face(image, face[4:14].reshape(5, 2).astype(np.float32))
-    rgb = cv2.cvtColor(aligned, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-    normalized = (rgb - 0.5) / 0.5
-    blob = cv2.dnn.blobFromImage(normalized)
-    network.setInput(blob, "data")
-    output = network.forward(["label"])[0]
-    logits = np.asarray(output).reshape(-1)
-    probabilities = softmax(logits)
-    index = int(np.argmax(probabilities))
-    expression = EXPRESSIONS[index]
+    expression, confidence, scores = predict_expression(network, aligned)
     box = {
         "x": round(float(face[0]) / width, 4),
         "y": round(float(face[1]) / height, 4),
@@ -96,9 +102,10 @@ def analyze_image(image: np.ndarray) -> dict:
         "expression": expression,
         "expression_label": EXPRESSION_LABELS[expression],
         "recommended_mood": MOOD_MAPPING[expression],
-        "confidence": round(float(probabilities[index]), 4),
+        "confidence": round(confidence, 4),
+        "scores": scores,
         "face_box": box,
-        "model": "OpenCV Zoo Progressive Teacher MobileFaceNet",
+        "model": "YuNet + ONNX Model Zoo FER+ 8-class CNN",
         "notice": "表情辨識僅用於推薦情境推測，不代表心理狀態或醫療判斷。",
     }
 

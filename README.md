@@ -16,7 +16,7 @@
 | 評論分析 | 情緒分數、負評比例、風險分級、常見優缺點與排名調整 |
 | 情境感知 | 快速情境、心情策略、瀏覽器定位與 Haversine 距離 |
 | 美食地圖 | React Leaflet、OpenStreetMap、排名／CP 值圖針與使用者位置 |
-| OpenCV | YuNet 臉部偵測、MobileFaceNet 表情分類、心情映射 |
+| OpenCV | YuNet 臉部偵測與對齊、FER+ 八類表情分類、心情映射 |
 | 內食推薦 | 食材標準化、候選召回、料理限制與混合式排序 |
 | 保存決策 | 已放天數、剩餘期限、價格、易腐程度與使用優先級 |
 | 可信內容 | 從審核知識庫取得料理步驟、內容編號、來源與日期 |
@@ -64,7 +64,7 @@ restaurant_recommender/
 │   ├── services.py           # API 推薦流程
 │   ├── auth.py               # SQLite 帳號、Session、收藏
 │   └── emotion.py            # OpenCV 表情辨識
-├── models/                   # YuNet、MobileFaceNet ONNX
+├── models/                   # YuNet、FER+ ONNX
 ├── tests/                    # Python 自動測試
 ├── report/                   # 專題報告與簡報大綱
 │   └── algorithm_examples.py # 可獨立執行的演算法展示

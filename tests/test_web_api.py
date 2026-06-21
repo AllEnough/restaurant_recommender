@@ -11,6 +11,7 @@ os.environ["APP_DB_PATH"] = TEST_DATABASE.name
 
 from fastapi.testclient import TestClient
 
+from web_api.emotion import EXPRESSIONS, load_models, predict_expression
 from web_api.main import app
 
 
@@ -103,6 +104,18 @@ class WebApiTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertIn("沒有偵測到", response.json()["detail"])
+
+    def test_ferplus_model_has_eight_probability_outputs(self):
+        _, network = load_models()
+        expression, confidence, scores = predict_expression(
+            network, np.zeros((112, 112, 3), dtype=np.uint8)
+        )
+        self.assertEqual(len(EXPRESSIONS), 8)
+        self.assertEqual(set(scores), set(EXPRESSIONS))
+        self.assertIn(expression, EXPRESSIONS)
+        self.assertAlmostEqual(sum(scores.values()), 1.0, places=3)
+        self.assertGreaterEqual(confidence, 0)
+        self.assertLessEqual(confidence, 1)
 
 
 if __name__ == "__main__":
