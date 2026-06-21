@@ -400,7 +400,9 @@ def recommend_recipe_payload(payload) -> dict:
         max_missing,
         only_cookable,
     )
+    recalled_count = len(result)
     result = attach_recipe_knowledge(result, load_recipe_knowledge(ROOT / "recipe_knowledge.csv"))
+    knowledge_excluded_count = recalled_count - len(result)
     baseline = result.sort_values(by=["score", "recall_score", "matched_count", "time"], ascending=[False, False, False, True]).reset_index(drop=True)
     priority_rows = [calculate_priority(item) for item in payload.ingredients]
     profiles = {row["ingredient"]: row for row in priority_rows}
@@ -424,5 +426,7 @@ def recommend_recipe_payload(payload) -> dict:
             "effective_max_calories": max_calories,
             "effective_max_missing": max_missing,
             "effective_only_cookable": only_cookable,
+            "knowledge_constraint": "strict_verified_only",
+            "knowledge_excluded_count": knowledge_excluded_count,
         },
     }

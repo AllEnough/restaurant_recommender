@@ -173,16 +173,36 @@ def load_recipe_knowledge(file_path="recipe_knowledge.csv"):
     missing = required_columns - set(knowledge.columns)
     if missing:
         raise ValueError(f"食譜知識庫缺少欄位：{', '.join(sorted(missing))}")
+    if knowledge["recipe_name"].duplicated().any():
+        duplicates = sorted(knowledge.loc[knowledge["recipe_name"].duplicated(), "recipe_name"].unique())
+        raise ValueError(f"食譜知識庫包含重複食譜：{', '.join(duplicates)}")
+    if knowledge["knowledge_id"].duplicated().any():
+        duplicates = sorted(knowledge.loc[knowledge["knowledge_id"].duplicated(), "knowledge_id"].unique())
+        raise ValueError(f"食譜知識庫包含重複內容編號：{', '.join(duplicates)}")
+    trusted_columns = ["recipe_name", "knowledge_id", "steps", "source_name", "verified_date"]
+    blank_rows = knowledge[trusted_columns].apply(lambda column: column.str.strip().eq("")).any(axis=1)
+    if blank_rows.any():
+        rows = ", ".join(str(index + 2) for index in knowledge.index[blank_rows])
+        raise ValueError(f"食譜知識庫可信來源欄位不可空白，CSV 列：{rows}")
     return knowledge
 
 
 def attach_recipe_knowledge(results, knowledge):
     if results.empty:
         return results.copy()
-    enriched = results.merge(knowledge, how="left", left_on="name", right_on="recipe_name")
-    enriched["knowledge_status"] = enriched["knowledge_id"].apply(
-        lambda value: "已檢索可信內容" if str(value).strip() else "缺少可信內容"
+    enriched = results.merge(
+        knowledge,
+        how="left",
+        left_on="name",
+        right_on="recipe_name",
+        validate="many_to_one",
     )
+    trusted_columns = ["knowledge_id", "steps", "source_name", "verified_date"]
+    trusted = enriched[trusted_columns].apply(lambda column: column.astype(str).str.strip().ne("")).all(axis=1)
+    enriched["knowledge_status"] = trusted.map(
+        {True: "已檢索可信內容", False: "缺少可信內容"}
+    )
+    enriched = enriched[trusted].copy()
     return enriched.drop(columns=["recipe_name"], errors="ignore")
 
 

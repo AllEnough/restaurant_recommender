@@ -49,6 +49,23 @@ class RecipePipelineTest(unittest.TestCase):
         self.assertTrue((enriched["knowledge_status"] == "已檢索可信內容").all())
         self.assertTrue(enriched["knowledge_id"].str.startswith("KB-R").all())
 
+    def test_recipe_without_complete_trusted_content_is_excluded(self):
+        result = recommend_recipes(
+            self.recipes,
+            "雞蛋, 白飯, 蔥",
+            max_time=60,
+            difficulty_preference="不限",
+            top_n=len(self.recipes),
+            max_calories=900,
+            max_missing=5,
+        )
+        target = result.iloc[0]["name"]
+        incomplete = self.knowledge.copy()
+        incomplete.loc[incomplete["recipe_name"] == target, "steps"] = ""
+        enriched = attach_recipe_knowledge(result, incomplete)
+        self.assertNotIn(target, set(enriched["name"]))
+        self.assertTrue((enriched["knowledge_status"] == "已檢索可信內容").all())
+
     def test_knowledge_schema_and_ingredients_match_recipe_data(self):
         self.assertEqual(
             list(self.knowledge.columns),

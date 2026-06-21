@@ -284,7 +284,7 @@ function RecipeAdvanced({ data }) {
     </section>
 
     <section className="border-t border-line pt-5">
-      <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-base font-black">食譜分數拆解</h3><span className="text-sm font-bold text-leaf">可信內容 {coverage.covered ?? 0}/{coverage.total ?? 0}</span></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-base font-black">食譜分數拆解</h3><div className="flex flex-wrap gap-2 text-sm font-bold text-leaf"><span>可信內容 {coverage.covered ?? 0}/{coverage.total ?? 0}</span><span className="rounded border border-leaf/25 bg-leaf-soft px-2 py-0.5">嚴格來源約束</span></div></div>
       <div className="mt-3 grid gap-4 lg:grid-cols-2">{(analysis.score_breakdown || []).map((row) => <div key={row.name} className="border-b border-line pb-4">
         <div className="mb-2 flex items-center justify-between"><span className="font-black">{row.name}</span><span className="text-lg font-black text-leaf">{row.final_score}</span></div>
         <div className="grid gap-2"><ScoreBar label="食材符合" value={row.ingredient_score} max={50} tone="green"/><ScoreBar label="料理時間" value={row.time_score} max={20}/><ScoreBar label="料理難度" value={row.difficulty_score} max={20} tone="muted"/><ScoreBar label="熱量" value={row.calorie_score} max={10} tone="green"/><ScoreBar label="缺料扣分" value={row.missing_penalty} max={20}/><ScoreBar label="保存加權" value={row.priority_bonus} max={25} tone="green"/></div>

@@ -51,6 +51,8 @@ class WebApiTest(unittest.TestCase):
         self.assertIn("evaluation", recipe_data["analysis"])
         self.assertGreater(len(recipe_data["analysis"]["priorities"]), 0)
         self.assertGreater(len(recipe_data["analysis"]["score_breakdown"]), 0)
+        self.assertEqual(recipe_data["meta"]["knowledge_constraint"], "strict_verified_only")
+        self.assertEqual(recipe_data["analysis"]["knowledge_coverage"]["covered"], len(recipe_data["results"]))
 
     def test_recipe_scenarios_apply_real_constraints(self):
         ingredients = [
