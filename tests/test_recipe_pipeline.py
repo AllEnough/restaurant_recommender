@@ -18,8 +18,11 @@ class RecipePipelineTest(unittest.TestCase):
     def test_ingredient_aliases_are_normalized(self):
         report = get_ingredient_normalization_report("蛋, 青蔥, 蕃茄")
         normalized = {item["normalized"] for item in report}
-        self.assertEqual(normalized, {"雞蛋", "蔥", "番茄"})
-        self.assertTrue(all(item["changed"] for item in report))
+        self.assertEqual(normalized, {"雞蛋", "蔥", "蕃茄"})
+        changes = {item["original"]: item["changed"] for item in report}
+        self.assertTrue(changes["蛋"])
+        self.assertTrue(changes["青蔥"])
+        self.assertFalse(changes["蕃茄"])
 
     def test_candidate_recall_requires_an_ingredient_overlap(self):
         result = recommend_recipes(

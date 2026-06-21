@@ -178,30 +178,20 @@ CSV datasets / SQLite / ONNX models
 python3 report/algorithm_examples.py
 ```
 
-完整程式位於 `report/algorithm_examples.py`，不需要啟動 React、FastAPI 或讀取 CSV，即可展示外食排名、食材優先順序與食譜混合排序。
+完整程式位於 `report/algorithm_examples.py`，它直接匯入正式系統使用的 `review_score.py`、`recipe_rank.py` 與 `ingredient.py`，不另外複製公式。
 
-### 8.1 外食最終分數
+### 8.1 評論風險分數（`review_score.py`）
 
 ```python
-base_score = min(max(sum(parts.values()), 0), 100)
-
-review_adjustment = max(
-    min((sentiment_score - 50) * 0.16 - negative_ratio * 0.08, 10),
-    -12,
-)
-
-final_score = min(
-    max(base_score + review_adjustment * review_weight + intent_adjustment, 0),
-    135,
-)
+sentiment_score = max(0, min(100, 50 + total_raw_score * 10))
+risk_adjustment = (sentiment_score - 50) * 0.12 - negative_ratio * 0.08
 ```
 
 講解順序：
 
-1. `parts` 是評分、價格、距離、類型、情境、外帶、辣度與速度。
-2. `review_adjustment` 將評論情緒與負評比例轉成 -12 至 10 的調整。
-3. `intent_adjustment` 代表省錢、快速或不踩雷情境。
-4. 三者相加後得到外食最終排名。
+1. 每則評論依正負關鍵字得到 `raw_score`。
+2. 所有評論合併成 0 至 100 的情緒分數。
+3. 情緒分數與負評比例產生 `risk_adjustment`，再交給餐廳推薦排序。
 
 ### 8.2 食材使用優先級
 
@@ -211,12 +201,12 @@ priority_score = min(
     expiry_score + price_score + perishability_score,
     100,
 )
-scheduling_ratio = waste_cost / (remaining_days + 1)
+scheduling_ratio = price / (remaining_days + 1)
 ```
 
 講解重點：剩餘天數放在分母，因此越接近過期，排程比值越高；價格與易腐程度代表食材被浪費時的成本。
 
-### 8.3 食譜混合排序
+### 8.3 食譜基礎排序（`recipe_rank.py`）
 
 ```python
 base_score = (
@@ -224,18 +214,16 @@ base_score = (
     + time_score
     + difficulty_score
     + calorie_score
-    - missing_penalty
+    - missing_count * 4
 )
-priority_bonus = min(used_priority / 8 + high_priority_count * 5, 25)
-final_score = min(max(base_score + priority_bonus, 0), 125)
 ```
 
-講解重點：基礎分數回答「這道食譜適不適合」，保存加權回答「這道食譜現在是否應該先煮」。這也是本專題和一般食譜搜尋的主要差異。
+講解重點：`recipe_rank.py` 先回答「這道食譜適不適合」；正式 API 再把 `ingredient.py` 的優先分數轉成保存加權，回答「現在是否應該先煮」。
 
 ### 8.4 報告展示方式
 
 1. 先執行範例並顯示三組排序。
-2. 修改外食預算或評論負評比例，重新執行並觀察名次。
+2. 修改評論文字或負評比例，重新執行並觀察風險調整。
 3. 修改豆腐的已放天數，展示保存優先級如何影響食譜排序。
 4. 回到正式網站，指出推薦卡片中的基礎分數、評論調整與保存加權來自相同概念。
 

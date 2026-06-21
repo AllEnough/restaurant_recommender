@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from ingredient import calculate_priority as core_calculate_priority
 from recommender import load_data, recommend_restaurants
+from recipe_rank import normalize_ingredient as normalize_core_ingredient
 from recipe_recommender import (
     attach_recipe_knowledge,
     collect_ingredient_options,
@@ -329,24 +331,22 @@ def recommend_restaurant_payload(payload) -> dict:
 
 
 def calculate_priority(item) -> dict:
-    shelf_life = max(int(item.shelf_life), 1)
-    days_stored = max(int(item.days_stored), 0)
-    remaining = max(shelf_life - days_stored, 0)
-    expiry = min(days_stored / shelf_life, 1) * 45
-    expiry += {0: 30, 1: 22, 2: 14}.get(remaining, 0)
-    price_score = min(float(item.price) / 150, 1) * 20
-    perishability_score = {"低": 5, "中": 10, "高": 15}.get(item.perishability, 10)
-    score = round(min(expiry + price_score + perishability_score, 100), 1)
-    penalty = float(item.price) * {"低": 0.8, "中": 1.0, "高": 1.25}.get(item.perishability, 1)
-    ratio = round(penalty / (remaining + 1), 2)
-    level = "高" if score >= 75 else "中" if score >= 45 else "低"
+    core_result = core_calculate_priority(
+        {
+            "name": normalize_core_ingredient(item.name),
+            "days_stored": item.days_stored,
+            "shelf_life": item.shelf_life,
+            "price": item.price,
+            "perishability": {"低": "low", "中": "middle", "高": "high"}[item.perishability],
+        }
+    )
     return {
-        "ingredient": item.name,
-        "priority_score": score,
-        "scheduling_ratio": ratio,
-        "remaining_days": remaining,
-        "level": level,
-        "price": item.price,
+        "ingredient": core_result["name"],
+        "priority_score": core_result["priority_score"],
+        "scheduling_ratio": core_result["scheduling_ratio"],
+        "remaining_days": core_result["remaining_days"],
+        "level": {"low": "低", "middle": "中", "high": "高"}[core_result["level"]],
+        "price": core_result["price"],
     }
 
 

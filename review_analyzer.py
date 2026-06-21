@@ -1,44 +1,14 @@
 import pandas as pd
 
+from review_score import (
+    analyze_one_review as core_analyze_one_review,
+    analyze_restaurant_reviews,
+    negative_words,
+    positive_words,
+)
 
-POSITIVE_WORDS = {
-    "好吃",
-    "推薦",
-    "親切",
-    "快速",
-    "便宜",
-    "划算",
-    "乾淨",
-    "新鮮",
-    "份量足",
-    "香",
-    "穩定",
-    "舒服",
-    "濃郁",
-    "爽口",
-    "方便",
-    "回訪",
-    "入味",
-    "酥脆",
-}
-
-NEGATIVE_WORDS = {
-    "太鹹",
-    "偏貴",
-    "排隊",
-    "等很久",
-    "油膩",
-    "普通",
-    "吵",
-    "不穩",
-    "份量少",
-    "太辣",
-    "座位少",
-    "冷掉",
-    "服務慢",
-    "味道淡",
-    "擁擠",
-}
+POSITIVE_WORDS = set(positive_words)
+NEGATIVE_WORDS = set(negative_words)
 
 TOPIC_KEYWORDS = {
     "價格": ["便宜", "划算", "偏貴", "價格", "CP"],
@@ -64,25 +34,12 @@ def load_reviews(file_path="reviews.csv"):
     return reviews.dropna(subset=["restaurant_name", "review_text"])
 
 
-def count_hits(text, words):
-    return sum(1 for word in words if word in text)
-
-
 def analyze_review_text(text):
-    positive_hits = count_hits(text, POSITIVE_WORDS)
-    negative_hits = count_hits(text, NEGATIVE_WORDS)
-    score = positive_hits - negative_hits
-
-    if score > 0:
-        sentiment = "正向"
-    elif score < 0:
-        sentiment = "負向"
-    else:
-        sentiment = "中性"
-
+    result = core_analyze_one_review(text)
+    sentiment = {"positive": "正向", "negative": "負向", "neutral": "中性"}[result["label"]]
     positive_words = [word for word in POSITIVE_WORDS if word in text]
     negative_words = [word for word in NEGATIVE_WORDS if word in text]
-    return sentiment, score, positive_words, negative_words
+    return sentiment, result["raw_score"], positive_words, negative_words
 
 
 def extract_topics(texts):
@@ -129,32 +86,21 @@ def analyze_reviews(reviews):
 
     rows = []
     for name, group in reviews.groupby("restaurant_name"):
-        sentiments = []
-        raw_scores = []
         positive_words = []
         negative_words = []
         texts = group["review_text"].tolist()
 
         for text in texts:
-            sentiment, score, positives, negatives = analyze_review_text(text)
-            sentiments.append(sentiment)
-            raw_scores.append(score)
+            _, _, positives, negatives = analyze_review_text(text)
             positive_words.extend(positives)
             negative_words.extend(negatives)
 
         review_count = len(texts)
-        negative_count = sentiments.count("負向")
-        positive_count = sentiments.count("正向")
-        negative_ratio = round((negative_count / review_count) * 100, 1) if review_count else 0
-        sentiment_score = round(min(max(50 + sum(raw_scores) * 8 + positive_count * 4 - negative_count * 6, 0), 100), 1)
-        review_adjustment = round(max(min((sentiment_score - 50) * 0.16 - negative_ratio * 0.08, 10), -12), 1)
-
-        if negative_ratio >= 45 or sentiment_score < 45:
-            review_risk = "高"
-        elif negative_ratio >= 25 or sentiment_score < 60:
-            review_risk = "中"
-        else:
-            review_risk = "低"
+        core_result = analyze_restaurant_reviews(name, texts)
+        negative_ratio = core_result["negative_ratio"]
+        sentiment_score = core_result["sentiment_score"]
+        review_adjustment = core_result["risk_adjustment"]
+        review_risk = {"high": "高", "middle": "中", "low": "低"}[core_result["risk_level"]]
 
         top_positive = sorted(set(positive_words), key=lambda word: (-positive_words.count(word), word))
         top_negative = sorted(set(negative_words), key=lambda word: (-negative_words.count(word), word))

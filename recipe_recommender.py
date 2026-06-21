@@ -1,38 +1,15 @@
 import pandas as pd
 
-
-DIFFICULTY_SCORE = {
-    "簡單": 20,
-    "中等": 12,
-    "困難": 5,
-}
-
-
-INGREDIENT_ALIASES = {
-    "蛋": "雞蛋",
-    "雞蛋液": "雞蛋",
-    "青蔥": "蔥",
-    "蔥花": "蔥",
-    "青菜葉": "青菜",
-    "葉菜": "青菜",
-    "高麗": "高麗菜",
-    "洋芋": "馬鈴薯",
-    "土豆": "馬鈴薯",
-    "紅蘿蔔絲": "紅蘿蔔",
-    "胡蘿蔔": "紅蘿蔔",
-    "蕃茄": "番茄",
-    "豬肉片": "豬肉",
-    "豬肉絲": "豬肉",
-    "雞胸": "雞胸肉",
-    "白米飯": "白飯",
-    "米飯": "白飯",
-    "意麵": "義大利麵",
-}
+from recipe_rank import (
+    normalize_ingredient as core_normalize_ingredient,
+    parse_user_ingredients,
+    recall_candidates as core_recall_candidates,
+    score_recipe as core_score_recipe,
+)
 
 
 def normalize_ingredient(value):
-    ingredient = str(value).strip().lower()
-    return INGREDIENT_ALIASES.get(ingredient, ingredient)
+    return core_normalize_ingredient(str(value).lower())
 
 
 def load_recipes(file_path="recipes.csv"):
@@ -46,11 +23,7 @@ def load_recipes(file_path="recipes.csv"):
 def parse_ingredients(text):
     if not text:
         return set()
-    separators = [",", "，", "、", " ", "\n"]
-    normalized = str(text)
-    for separator in separators[1:]:
-        normalized = normalized.replace(separator, separators[0])
-    return {normalize_ingredient(item) for item in normalized.split(",") if item.strip()}
+    return parse_user_ingredients(str(text).replace(" ", ",").replace("\n", ","))
 
 
 def get_ingredient_normalization_report(text):
@@ -86,33 +59,19 @@ def calculate_recipe_score(row, user_ingredients, max_time, difficulty_preferenc
     recipe_ingredients = parse_ingredients(row["ingredients"])
     matched = sorted(recipe_ingredients & user_ingredients)
     missing = sorted(recipe_ingredients - user_ingredients)
-
-    if not recipe_ingredients:
-        match_ratio = 0
-    else:
-        match_ratio = len(matched) / len(recipe_ingredients)
-
-    ingredient_score = match_ratio * 50
-
-    if row["time"] <= max_time:
-        time_score = 20
-    else:
-        over_time = row["time"] - max_time
-        time_score = max(0, 20 - over_time * 1.5)
-
-    if difficulty_preference == "不限":
-        difficulty_score = DIFFICULTY_SCORE.get(row["difficulty"], 10)
-    elif row["difficulty"] == difficulty_preference:
-        difficulty_score = 20
-    else:
-        difficulty_score = 8
-
-    calorie_score = 10
-    if max_calories is not None and row["calories"] > max_calories:
-        calorie_score = max(0, 10 - ((row["calories"] - max_calories) / 50))
-
-    missing_penalty = max(0, len(missing) - int(row["missing_allowed"])) * 5
-    score = ingredient_score + time_score + difficulty_score + calorie_score - missing_penalty
+    core_row = row.to_dict()
+    core_row["ingredients"] = sorted(recipe_ingredients)
+    core_row["matched"] = matched
+    core_row["missing"] = missing
+    core_row["difficulty"] = {"簡單": "easy", "中等": "middle", "困難": "hard"}.get(
+        row["difficulty"], str(row["difficulty"]).lower()
+    )
+    scored = core_score_recipe(
+        core_row,
+        max_time=max_time,
+        max_calories=max_calories if max_calories is not None else 10**9,
+    )
+    match_ratio = len(matched) / len(recipe_ingredients) if recipe_ingredients else 0
 
     reasons = []
     if matched:
@@ -129,31 +88,30 @@ def calculate_recipe_score(row, user_ingredients, max_time, difficulty_preferenc
         reasons.append("熱量符合需求")
 
     return {
-        "score": round(max(score, 0), 2),
+        "score": round(max(scored["score"], 0), 2),
         "reason": "、".join(reasons),
         "matched_ingredients": "、".join(matched),
         "missing_ingredients": "、".join(missing),
         "matched_count": len(matched),
         "missing_count": len(missing),
         "recall_score": round(match_ratio * 100, 1),
-        "ingredient_score": round(ingredient_score, 1),
-        "time_score": round(time_score, 1),
-        "difficulty_score": round(difficulty_score, 1),
-        "calorie_score": round(calorie_score, 1),
-        "missing_penalty": round(missing_penalty, 1),
+        "ingredient_score": scored["ingredient_score"],
+        "time_score": scored["time_score"],
+        "difficulty_score": scored["difficulty_score"],
+        "calorie_score": scored["calorie_score"],
+        "missing_penalty": scored["missing_penalty"],
     }
 
 
 def recall_recipe_candidates(df, user_ingredients):
-    candidates = df.copy()
-    candidates["recall_matches"] = candidates["ingredients"].apply(
-        lambda value: len(parse_ingredients(value) & user_ingredients)
-    )
-    if user_ingredients and (candidates["recall_matches"] > 0).any():
-        candidates = candidates[candidates["recall_matches"] > 0]
-        candidates["recall_strategy"] = "標準化食材交集召回"
-    else:
-        candidates["recall_strategy"] = "條件式全庫備援召回"
+    recalled = core_recall_candidates(user_ingredients, df.to_dict("records"))
+    candidates = pd.DataFrame(recalled, columns=[*df.columns, "matched", "missing"])
+    if candidates.empty:
+        candidates["recall_matches"] = pd.Series(dtype=int)
+        candidates["recall_strategy"] = pd.Series(dtype=str)
+        return candidates
+    candidates["recall_matches"] = candidates["matched"].apply(len)
+    candidates["recall_strategy"] = "標準化食材交集召回"
     return candidates
 
 
@@ -218,11 +176,8 @@ def recommend_recipes(
 ):
     user_ingredients = parse_ingredients(ingredient_text)
     results = recall_recipe_candidates(df, user_ingredients)
-
-    scores = results.apply(
-        lambda row: calculate_recipe_score(row, user_ingredients, max_time, difficulty_preference, max_calories),
-        axis=1,
-    )
+    if difficulty_preference != "不限":
+        results = results[results["difficulty"] == difficulty_preference]
 
     score_columns = [
         "score",
@@ -238,6 +193,16 @@ def recommend_recipes(
         "calorie_score",
         "missing_penalty",
     ]
+    if results.empty:
+        for column in score_columns:
+            results[column] = pd.Series(dtype=float if column.endswith("score") or column.endswith("count") else str)
+        return results
+
+    scores = results.apply(
+        lambda row: calculate_recipe_score(row, user_ingredients, max_time, difficulty_preference, max_calories),
+        axis=1,
+    )
+
     for column in score_columns:
         results[column] = scores.apply(lambda value, key=column: value[key])
 

@@ -71,8 +71,11 @@ restaurant_recommender/
 ├── report/                   # 專題報告與簡報大綱
 │   └── algorithm_examples.py # 可獨立執行的演算法展示
 ├── recommender.py            # 外食基礎推薦模型
-├── recipe_recommender.py     # 內食召回與排序
-├── review_analyzer.py        # 評論文字分析
+├── review_score.py           # 評論情緒、負評比例與風險核心
+├── recipe_rank.py            # 食材標準化、候選召回與基礎排序核心
+├── ingredient.py             # 食材保存優先級與排程比值核心
+├── recipe_recommender.py     # recipe_rank 的 CSV 與可信知識轉接層
+├── review_analyzer.py        # review_score 的摘要與資料合併層
 ├── weather_service.py        # 天氣資料與分類
 ├── restaurants.csv
 ├── reviews.csv
@@ -187,6 +190,8 @@ npm run build --prefix frontend
 ```bash
 python3 report/algorithm_examples.py
 ```
+
+此展示程式直接匯入 `review_score.py`、`recipe_rank.py` 與 `ingredient.py`，和正式 API 使用相同核心公式，不另維護報告專用副本。
 
 ## Railway 部署
 

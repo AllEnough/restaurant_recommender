@@ -83,7 +83,7 @@ CSV + SQLite + ONNX
 
 > 不同快速模式不只是改變表單預設值，還會實際加入不同的排序分數，因此省錢、快速和不踩雷的結果會有差異。
 
-**程式展示：** 開啟 `report/algorithm_examples.py` 的 `restaurant_score()`，說明基礎分數、評論調整與情境調整如何組成最終分數。
+**程式展示：** 開啟 `review_score.py` 的 `analyze_restaurant_reviews()`，說明正負關鍵字如何形成情緒分數、負評比例與風險調整。
 
 ## 第 6 頁：OpenCV 表情辨識
 
@@ -150,7 +150,7 @@ CSV + SQLite + ONNX
 
 > 一般食譜推薦只問能不能煮，我們還會判斷現在應該先煮哪一道，這是內食功能最重要的差異。
 
-**程式展示：** 開啟 `ingredient_priority()` 與 `recipe_score()`，修改豆腐的 `days_stored` 後重新執行，展示保存狀態如何改變排序。
+**程式展示：** 開啟 `ingredient.py` 的 `calculate_priority()` 與 `recipe_rank.py` 的 `score_recipe()`，修改食材的 `days_stored` 後重新執行，展示保存狀態與食譜排序。
 
 ## 第 9 頁：登入、資料庫與部署
 
