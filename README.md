@@ -1,3 +1,5 @@
+<img width="828" height="708" alt="image" src="https://github.com/user-attachments/assets/f282d6f6-a06b-412b-bbeb-67a9c6792163" />
+
 # 智慧飲食決策系統
 
 目前 API 版本：`2.1.1`（核心、唯讀資料集與執行時資料分離版）。
